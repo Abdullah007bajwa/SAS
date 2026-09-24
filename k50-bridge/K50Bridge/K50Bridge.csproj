@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>K50Bridge</RootNamespace>
+    <AssemblyName>K50Bridge</AssemblyName>
+    <Platforms>x86</Platforms>
+    <PlatformTarget>x86</PlatformTarget>
+    <RuntimeIdentifier>win-x86</RuntimeIdentifier>
+    <!-- SDK 6.3.1.55 — COM registered via SysWOW64\regsvr32; do NOT copy into repo -->
+    <ZKTecoSdkPath Condition="'$(ZKTecoSdkPath)' == ''">C:\ZKTecoSDK</ZKTecoSdkPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <!-- Production: no console — do not close a window to stop the bridge -->
+    <OutputType>WinExe</OutputType>
+  </PropertyGroup>
+
+  <!-- Interop: repo lib/ (from setup-sdk.ps1), SDK folder, or -p:ZKTecoSdkPath=... -->
+  <PropertyGroup>
+    <ZkInteropPath Condition="Exists('$(MSBuildProjectDirectory)\lib\Interop.zkemkeeper.dll')">$(MSBuildProjectDirectory)\lib\Interop.zkemkeeper.dll</ZkInteropPath>
+    <ZkInteropPath Condition="'$(ZkInteropPath)' == '' and Exists('$(ZKTecoSdkPath)\sdk\x86\Interop.zkemkeeper.dll')">$(ZKTecoSdkPath)\sdk\x86\Interop.zkemkeeper.dll</ZkInteropPath>
+    <ZkInteropPath Condition="'$(ZkInteropPath)' == '' and Exists('$(ZKTecoSdkPath)\x86\Interop.zkemkeeper.dll')">$(ZKTecoSdkPath)\x86\Interop.zkemkeeper.dll</ZkInteropPath>
+    <ZkInteropPath Condition="'$(ZkInteropPath)' == '' and Exists('$(ZKTecoSdkPath)\Interop.zkemkeeper.dll')">$(ZKTecoSdkPath)\Interop.zkemkeeper.dll</ZkInteropPath>
+  </PropertyGroup>
+
+  <Target Name="EnsureZkInterop" BeforeTargets="ResolveReferences">
+    <Error Condition="'$(ZkInteropPath)' == ''"
+           Text="Interop.zkemkeeper.dll not found. Run setup-sdk.ps1 from k50-bridge (Admin once for regsvr32), or place Interop.zkemkeeper.dll in K50Bridge/lib/." />
+  </Target>
+
+  <ItemGroup>
+    <Reference Include="Interop.zkemkeeper">
+      <HintPath>$(ZkInteropPath)</HintPath>
+      <Private>true</Private>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\sdk\x86\**\*" Condition="Exists('..\sdk\x86\zkemkeeper.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>sdk\x86\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
+  </ItemGroup>
+
+</Project>
