@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/database/daos/attendance_dao.dart';
 import '../../core/database/database_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/status_badge.dart';
@@ -148,7 +147,7 @@ class AttendanceScreen extends ConsumerWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.event_busy, size: 48, color: AppColors.textMuted.withOpacity(0.5)),
+                          Icon(Icons.event_busy, size: 48, color: AppColors.textMuted.withValues(alpha: 0.5)),
                           const SizedBox(height: 12),
                           const Text(
                             'No attendance records found for this date and filter criteria.',
@@ -237,17 +236,150 @@ class AttendanceScreen extends ConsumerWidget {
     );
   }
 
-  void _showManualEntryDialog(BuildContext context, WidgetRef ref) {
+  void _showManualEntryDialog(BuildContext context, WidgetRef ref) async {
+    final db = ref.read(appDatabaseProvider);
+    final students = await db.studentsDao.getAllStudents();
+    final staff = await db.staffDao.getAllStaff();
+    if (!context.mounted) return;
+
+    String personType = 'student';
+    int? selectedStudentId = students.isNotEmpty ? students.first.id : null;
+    int? selectedStaffId = staff.isNotEmpty ? staff.first.id : null;
+    String status = 'present';
+    final notesCtrl = TextEditingController();
+    TimeOfDay time = TimeOfDay.now();
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Record Manual Attendance'),
-        content: const Text(
-          'Biometric scans from the K50 are captured automatically.\n\nUse this action to mark an excused presence or manual punch if a student or teacher forgot their badge or scanned off-device.',
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.edit_calendar, color: AppColors.primary),
+              SizedBox(width: 8),
+              Text('Manual Attendance Entry'),
+            ],
+          ),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'student', label: Text('Student')),
+                      ButtonSegment(value: 'staff', label: Text('Staff / Teacher')),
+                    ],
+                    selected: {personType},
+                    onSelectionChanged: (val) {
+                      setDialogState(() => personType = val.first);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  if (personType == 'student')
+                    DropdownButtonFormField<int>(
+                      initialValue: selectedStudentId,
+                      decoration: const InputDecoration(labelText: 'Select Student'),
+                      items: students
+                          .map((s) => DropdownMenuItem(
+                                value: s.id,
+                                child: Text('${s.name} (${s.studentCode})'),
+                              ))
+                          .toList(),
+                      onChanged: (val) => setDialogState(() => selectedStudentId = val),
+                    )
+                  else
+                    DropdownButtonFormField<int>(
+                      initialValue: selectedStaffId,
+                      decoration: const InputDecoration(labelText: 'Select Staff Member'),
+                      items: staff
+                          .map((u) => DropdownMenuItem(
+                                value: u.id,
+                                child: Text('${u.name} (${u.employeeCode ?? "STF"})'),
+                              ))
+                          .toList(),
+                      onChanged: (val) => setDialogState(() => selectedStaffId = val),
+                    ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: status,
+                          decoration: const InputDecoration(labelText: 'Attendance Status'),
+                          items: const [
+                            DropdownMenuItem(value: 'present', child: Text('Present')),
+                            DropdownMenuItem(value: 'late', child: Text('Late')),
+                            DropdownMenuItem(value: 'half_day', child: Text('Half Day')),
+                            DropdownMenuItem(value: 'absent', child: Text('Excused Absent')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setDialogState(() => status = val);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Punch Time', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                          subtitle: Text(
+                            '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.access_time),
+                            onPressed: () async {
+                              final picked = await showTimePicker(context: ctx, initialTime: time);
+                              if (picked != null) {
+                                setDialogState(() => time = picked);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: notesCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Reason / Note (Optional)',
+                      hintText: 'e.g. Doctor appointment, badge forgotten',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                final date = ref.read(attendanceFilterDateProvider);
+                final dateStr = DateFormatter.toIsoDateString(date);
+                final dt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+
+                await db.attendanceDao.insertOrUpdateAttendance(
+                  personType: personType,
+                  studentId: personType == 'student' ? selectedStudentId : null,
+                  staffId: personType == 'staff' ? selectedStaffId : null,
+                  date: dateStr,
+                  checkInTime: dt.millisecondsSinceEpoch,
+                  status: status,
+                  method: 'manual',
+                  notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
+                );
+
+                ref.invalidate(attendanceListProvider);
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Record Attendance'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-        ],
       ),
     );
   }

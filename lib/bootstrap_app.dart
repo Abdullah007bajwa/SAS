@@ -49,7 +49,7 @@ class _BootstrapAppState extends State<BootstrapApp> {
       if (cloudReady) {
         await Supabase.initialize(
           url: supabaseUrl,
-          anonKey: supabaseAnonKey,
+          publishableKey: supabaseAnonKey,
         );
       }
 

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/database/daos/classes_dao.dart';
-import '../../core/database/daos/sections_dao.dart';
 import '../../core/database/database_provider.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -98,7 +96,7 @@ class ClassesScreen extends ConsumerWidget {
                                       Container(
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: AppColors.primary.withOpacity(0.1),
+                                          color: AppColors.primary.withValues(alpha: 0.1),
                                           borderRadius: BorderRadius.circular(8),
                                         ),
                                         child: const Icon(Icons.class_, color: AppColors.primary, size: 20),
@@ -123,7 +121,7 @@ class ClassesScreen extends ConsumerWidget {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary.withOpacity(0.08),
+                                      color: AppColors.primary.withValues(alpha: 0.08),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
@@ -199,15 +197,18 @@ class ClassesScreen extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Add Class / Grade'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Class Name (e.g. Grade 2)')),
-            const SizedBox(height: 12),
-            TextField(controller: gradeCtrl, decoration: const InputDecoration(labelText: 'Numeric Grade Level (e.g. 2)'), keyboardType: TextInputType.number),
-            const SizedBox(height: 12),
-            TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description')),
-          ],
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Class Name (e.g. Grade 2)')),
+              const SizedBox(height: 12),
+              TextField(controller: gradeCtrl, decoration: const InputDecoration(labelText: 'Numeric Grade Level (e.g. 2)'), keyboardType: TextInputType.number),
+              const SizedBox(height: 12),
+              TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description')),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -245,24 +246,27 @@ class ClassesScreen extends ConsumerWidget {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: const Text('Add Section'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<int>(
-                value: selectedClassId,
-                decoration: const InputDecoration(labelText: 'Class / Grade'),
-                items: classes.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-                onChanged: (val) {
-                  if (val != null) setDialogState(() => selectedClassId = val);
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Section Name (e.g. Section B)')),
-              const SizedBox(height: 12),
-              TextField(controller: roomCtrl, decoration: const InputDecoration(labelText: 'Room Number (e.g. 102)')),
-              const SizedBox(height: 12),
-              TextField(controller: capacityCtrl, decoration: const InputDecoration(labelText: 'Student Capacity'), keyboardType: TextInputType.number),
-            ],
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue: selectedClassId,
+                  decoration: const InputDecoration(labelText: 'Class / Grade'),
+                  items: classes.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+                  onChanged: (val) {
+                    if (val != null) setDialogState(() => selectedClassId = val);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Section Name (e.g. Section B)')),
+                const SizedBox(height: 12),
+                TextField(controller: roomCtrl, decoration: const InputDecoration(labelText: 'Room Number (e.g. 102)')),
+                const SizedBox(height: 12),
+                TextField(controller: capacityCtrl, decoration: const InputDecoration(labelText: 'Student Capacity'), keyboardType: TextInputType.number),
+              ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),

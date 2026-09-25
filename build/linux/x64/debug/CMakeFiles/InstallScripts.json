@@ -1,0 +1,14 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/cmake_install.cmake",
+		"/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/flutter/cmake_install.cmake",
+		"/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/runner/cmake_install.cmake",
+		"/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/plugins/gtk/cmake_install.cmake",
+		"/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/plugins/sqlite3_flutter_libs/cmake_install.cmake",
+		"/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/plugins/url_launcher_linux/cmake_install.cmake",
+		"/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/plugins/jni/cmake_install.cmake",
+		"/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/plugins/jni/shared/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

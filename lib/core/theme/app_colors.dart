@@ -14,6 +14,9 @@ class AppColors {
   static const late = Color(0xFFF59E0B); // Amber
   static const absent = Color(0xFFEF4444); // Crimson red
   static const halfDay = Color(0xFF8B5CF6); // Purple
+  static const error = Color(0xFFEF4444);
+  static const warning = Color(0xFFF59E0B);
+  static const success = Color(0xFF10B981);
 
   // Neutrals & Surfaces
   static const background = Color(0xFFF8FAFC);

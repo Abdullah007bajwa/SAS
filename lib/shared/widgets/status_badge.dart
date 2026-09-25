@@ -17,33 +17,33 @@ class StatusBadge extends StatelessWidget {
 
     switch (status.toLowerCase()) {
       case 'present':
-        bg = AppColors.present.withOpacity(0.12);
+        bg = AppColors.present.withValues(alpha: 0.12);
         fg = AppColors.present;
         break;
       case 'late':
-        bg = AppColors.late.withOpacity(0.12);
+        bg = AppColors.late.withValues(alpha: 0.12);
         fg = AppColors.late;
         break;
       case 'absent':
-        bg = AppColors.absent.withOpacity(0.12);
+        bg = AppColors.absent.withValues(alpha: 0.12);
         fg = AppColors.absent;
         break;
       case 'enrolled':
       case 'active':
-        bg = AppColors.secondary.withOpacity(0.12);
+        bg = AppColors.secondary.withValues(alpha: 0.12);
         fg = AppColors.secondary;
         break;
       case 'sent':
       case 'success':
-        bg = AppColors.present.withOpacity(0.12);
+        bg = AppColors.present.withValues(alpha: 0.12);
         fg = AppColors.present;
         break;
       case 'failed':
-        bg = AppColors.absent.withOpacity(0.12);
+        bg = AppColors.absent.withValues(alpha: 0.12);
         fg = AppColors.absent;
         break;
       default:
-        bg = AppColors.textMuted.withOpacity(0.12);
+        bg = AppColors.textMuted.withValues(alpha: 0.12);
         fg = AppColors.textSecondary;
     }
 

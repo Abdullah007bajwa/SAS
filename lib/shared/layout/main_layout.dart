@@ -6,6 +6,7 @@ import '../../core/sync/sync_providers.dart';
 import '../../core/sync/sync_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../utils/date_formatter.dart';
+import '../widgets/k50_status_badge.dart';
 
 class MainLayout extends ConsumerWidget {
   const MainLayout({
@@ -188,30 +189,10 @@ class MainLayout extends ConsumerWidget {
                       ),
                       Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: AppColors.present.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.check_circle, size: 14, color: AppColors.present),
-                                SizedBox(width: 6),
-                                Text(
-                                  'K50 Bridge Online',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.present,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          const K50StatusBadge(),
                           const SizedBox(width: 16),
                           CircleAvatar(
-                            backgroundColor: AppColors.primary.withOpacity(0.1),
+                            backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                             child: const Text('AD', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                           ),
                         ],
@@ -262,7 +243,7 @@ class _NavItem extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.primaryLight.withOpacity(0.18) : Colors.transparent,
+            color: isSelected ? AppColors.primaryLight.withValues(alpha: 0.18) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(

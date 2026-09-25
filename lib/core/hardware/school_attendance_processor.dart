@@ -24,7 +24,8 @@ class SchoolAttendanceProcessor {
   })  : _db = db,
         _backendClient = backendClient,
         _dedup = dedup,
-        _deviceUserMap = deviceUserMap;
+        _deviceUserMap = deviceUserMap,
+        _processedKeys = dedup.load();
 
   final AppDatabase _db;
   final ZkBackendClient _backendClient;
@@ -34,7 +35,7 @@ class SchoolAttendanceProcessor {
 
   Timer? _timer;
   K50AttendancePushService? _pushService;
-  late Set<String> _processedKeys;
+  Set<String> _processedKeys;
 
   bool _isProcessing = false;
 
@@ -188,7 +189,21 @@ class SchoolAttendanceProcessor {
     if (numericId != null) {
       candidates.add('EMP-$numericId');
       candidates.add('TCH-$numericId');
-      candidates.add('EMP${numericId.toString().padLeft(4, '0')}');
+      candidates.add('STF-$numericId');
+      candidates.add('ADM-$numericId');
+      candidates.add('EMP$numericId');
+      candidates.add('TCH$numericId');
+
+      if (numericId >= 8000) {
+        final offset = numericId >= 8001 ? (numericId - 8000) : numericId;
+        final pad3 = offset.toString().padLeft(3, '0');
+        candidates.add('TCH$pad3');
+        candidates.add('ADM$pad3');
+        candidates.add('STF$pad3');
+        candidates.add('EMP$pad3');
+        candidates.add('TCH-$pad3');
+        candidates.add('STF-$pad3');
+      }
     }
 
     for (final code in candidates) {
@@ -203,7 +218,14 @@ class SchoolAttendanceProcessor {
     if (mappedCode != null) candidates.add(mappedCode);
     if (numericId != null) {
       candidates.add('STU-$numericId');
+      candidates.add('STU$numericId');
       candidates.add('STU${numericId.toString().padLeft(4, '0')}');
+      if (numericId >= 1000) {
+        final offset = numericId >= 1001 ? (numericId - 1000) : numericId;
+        final pad3 = offset.toString().padLeft(3, '0');
+        candidates.add('STU$pad3');
+        candidates.add('STU-$pad3');
+      }
     }
 
     for (final code in candidates) {

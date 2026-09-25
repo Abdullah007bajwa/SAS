@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-import 'k50_device_config.dart';
 import 'zk_device_service.dart';
 
 class BackendApiException implements Exception {
@@ -25,6 +24,7 @@ class BackendEnrollResponse {
     this.remoteModeStarted = false,
     this.deviceUserId,
     this.enrollState,
+    this.verified = false,
   });
 
   factory BackendEnrollResponse.fromJson(Map<String, dynamic> json) {
@@ -37,6 +37,7 @@ class BackendEnrollResponse {
       remoteModeStarted: json['remoteModeStarted'] == true,
       deviceUserId: json['deviceUserId'] as String?,
       enrollState: json['enrollState'] as String?,
+      verified: json['verified'] == true,
     );
   }
 
@@ -48,11 +49,15 @@ class BackendEnrollResponse {
   final bool remoteModeStarted;
   final String? deviceUserId;
   final String? enrollState;
+  final bool verified;
 }
 
 class BackendHealthResponse {
   const BackendHealthResponse({
     required this.ok,
+    this.deviceOnline = false,
+    this.deviceState,
+    this.ip,
     this.error,
     this.queuePending,
     this.queueBusy,
@@ -61,13 +66,19 @@ class BackendHealthResponse {
   factory BackendHealthResponse.fromJson(Map<String, dynamic> json) {
     return BackendHealthResponse(
       ok: json['bridgeUp'] == true,
-      error: json['error'] as String?,
+      deviceOnline: json['ok'] == true,
+      deviceState: json['deviceState'] as String?,
+      ip: json['ip'] as String?,
+      error: json['lastError'] as String? ?? json['error'] as String?,
       queuePending: json['queuePending'] as int?,
       queueBusy: json['queueBusy'] as bool?,
     );
   }
 
   final bool ok;
+  final bool deviceOnline;
+  final String? deviceState;
+  final String? ip;
   final String? error;
   final int? queuePending;
   final bool? queueBusy;
@@ -146,17 +157,34 @@ class ZkBackendClient {
     required String appUserId,
     required String name,
     int? fingerIndex,
+    int timeoutSec = 45,
   }) async {
     try {
       final res = await _client.post(
-        Uri.parse(_cleanUrl('/device/enroll/start')),
+        Uri.parse(_cleanUrl('/device/fingerprint/enroll')),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'appUserId': appUserId,
+          'userId': appUserId,
           'name': name,
-          if (fingerIndex != null) 'fingerIndex': fingerIndex,
+          'fingerIndex': fingerIndex ?? 0,
+          'timeoutSec': timeoutSec,
         }),
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(Duration(seconds: timeoutSec + 15));
+
+      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      return BackendEnrollResponse.fromJson(json);
+    } catch (e) {
+      return BackendEnrollResponse(success: false, error: e.toString());
+    }
+  }
+
+  Future<BackendEnrollResponse> verifyFingerprint(String appUserId) async {
+    try {
+      final res = await _client.post(
+        Uri.parse(_cleanUrl('/device/fingerprint/verify')),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'userId': appUserId}),
+      ).timeout(const Duration(seconds: 10));
 
       final json = jsonDecode(res.body) as Map<String, dynamic>;
       return BackendEnrollResponse.fromJson(json);
@@ -166,24 +194,15 @@ class ZkBackendClient {
   }
 
   Future<BackendEnrollResponse> pollEnroll(String appUserId) async {
-    try {
-      final res = await _client.get(
-        Uri.parse(_cleanUrl('/device/enroll/poll?appUserId=${Uri.encodeComponent(appUserId)}')),
-      ).timeout(const Duration(seconds: 5));
-
-      final json = jsonDecode(res.body) as Map<String, dynamic>;
-      return BackendEnrollResponse.fromJson(json);
-    } catch (e) {
-      return BackendEnrollResponse(success: false, error: e.toString());
-    }
+    return verifyFingerprint(appUserId);
   }
 
   Future<bool> deleteUser(String appUserId) async {
     try {
       final res = await _client.post(
-        Uri.parse(_cleanUrl('/device/users/delete')),
+        Uri.parse(_cleanUrl('/device/user/delete')),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'appUserId': appUserId}),
+        body: jsonEncode({'userId': appUserId}),
       ).timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {

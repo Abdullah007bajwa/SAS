@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/database_provider.dart';
+import '../../core/database/demo_seeder.dart';
 import '../../core/hardware/hardware_providers.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -98,10 +99,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                     ],
                   ),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.save, size: 16),
-                    label: const Text('Save Configuration'),
-                    onPressed: _saveSettings,
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.dataset_outlined, size: 16),
+                        label: const Text('Seed Demo Data'),
+                        onPressed: _seedDemoData,
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.save, size: 16),
+                        label: const Text('Save Configuration'),
+                        onPressed: _saveSettings,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -413,6 +424,51 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _seedDemoData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.dataset_outlined, color: AppColors.primary),
+            SizedBox(width: 8),
+            Text('Populate Demo Data'),
+          ],
+        ),
+        content: const SizedBox(
+          width: 460,
+          child: Text(
+            'This will seed 16 demo students across 5 grade levels, 8 staff and teachers, today\'s attendance punches (present, late, absent), and parent alert jobs.\n\nExisting records will not be overwritten.',
+            style: TextStyle(fontSize: 14, height: 1.5),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Proceed & Seed'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final db = ref.read(appDatabaseProvider);
+    await DemoSeeder.seed(db);
+    _initialized = false;
+    ref.invalidate(settingsMapProvider);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo school data populated successfully!'),
+          backgroundColor: AppColors.present,
+        ),
+      );
+    }
+  }
+
   void _testBridge() async {
     final client = ref.read(zkBackendClientProvider);
     final res = await client.health();
@@ -421,10 +477,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text(res.ok ? 'Bridge Connected' : 'Bridge Offline'),
-          content: Text(res.ok
-              ? 'The C# K50 bridge is running and responsive on port ${_bridgePortCtrl.text}.'
-              : 'Could not connect to C# bridge: ${res.error ?? "Connection refused."}\n\nMake sure K50Bridge is running on Windows.'),
+          title: Row(
+            children: [
+              Icon(
+                res.ok ? Icons.check_circle : Icons.error_outline,
+                color: res.ok ? AppColors.present : AppColors.error,
+              ),
+              const SizedBox(width: 8),
+              Text(res.ok ? 'Bridge Connected' : 'Bridge Offline'),
+            ],
+          ),
+          content: SizedBox(
+            width: 440,
+            child: Text(
+              res.ok
+                  ? 'The C# K50 bridge is running and responsive on port ${_bridgePortCtrl.text}.\nDevice online: ${res.deviceOnline ? "Yes" : "No"}'
+                  : 'Could not connect to C# bridge: ${res.error ?? "Connection refused."}\n\nMake sure K50Bridge is running on Windows (or configured host).',
+              style: const TextStyle(fontSize: 14, height: 1.4),
+            ),
+          ),
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
         ),
       );

@@ -1,0 +1,21 @@
+# ninja log v7
+1	24	1790348855378018935	sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-mkdir	8cd3d2236c4f4a14
+1	24	1790348855378018935	/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/_deps/sqlite3-subbuild/sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-mkdir	8cd3d2236c4f4a14
+24	12692	1790348868047006855	sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-download	f6c6c5d41ee23457
+24	12692	1790348868047006855	/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/_deps/sqlite3-subbuild/sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-download	f6c6c5d41ee23457
+12692	12715	1790348868070006833	sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-update	b094b58406a2aa75
+12692	12715	1790348868070006833	/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/_deps/sqlite3-subbuild/sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-update	b094b58406a2aa75
+12715	12737	1790348868092006812	sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-patch	387d713695b3c3e3
+12715	12737	1790348868092006812	/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/_deps/sqlite3-subbuild/sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-patch	387d713695b3c3e3
+12737	12759	1790348868114006791	sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-configure	c3e31b0b6c8c7635
+12737	12759	1790348868114006791	/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/_deps/sqlite3-subbuild/sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-configure	c3e31b0b6c8c7635
+12759	12781	1790348868136006770	sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-build	d3ae25f3b39553c0
+12759	12781	1790348868136006770	/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/_deps/sqlite3-subbuild/sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-build	d3ae25f3b39553c0
+12781	12803	1790348868158006749	sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-install	124d63b3b38d748
+12781	12803	1790348868158006749	/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/_deps/sqlite3-subbuild/sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-install	124d63b3b38d748
+12803	12828	1790348868182006726	sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-test	c08df57cd51bb098
+12803	12828	1790348868182006726	/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/_deps/sqlite3-subbuild/sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-test	c08df57cd51bb098
+12828	12863	1790348868218006692	CMakeFiles/sqlite3-populate-complete	7a038f64aa059fd7
+12828	12863	1790348868218006692	sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-done	7a038f64aa059fd7
+12828	12863	1790348868218006692	/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/_deps/sqlite3-subbuild/CMakeFiles/sqlite3-populate-complete	7a038f64aa059fd7
+12828	12863	1790348868218006692	/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/_deps/sqlite3-subbuild/sqlite3-populate-prefix/src/sqlite3-populate-stamp/sqlite3-populate-done	7a038f64aa059fd7

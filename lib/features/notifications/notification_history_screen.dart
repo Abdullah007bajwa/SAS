@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/database/daos/notifications_dao.dart';
 import '../../core/database/database_provider.dart';
 import '../../core/notifications/notification_providers.dart';
 import '../../core/theme/app_colors.dart';

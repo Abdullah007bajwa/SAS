@@ -1,7 +1,4 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
-import 'package:uuid/uuid.dart';
 
 import 'daos/activity_dao.dart';
 import 'daos/attendance_dao.dart';
@@ -13,9 +10,8 @@ import 'daos/staff_dao.dart';
 import 'daos/students_dao.dart';
 import 'daos/sections_dao.dart';
 import 'daos/sync_dao.dart';
+import 'demo_seeder.dart';
 import 'tables/tables.dart';
-
-const _uuid = Uuid();
 
 @DriftDatabase(
   tables: [
@@ -51,11 +47,19 @@ class AppDatabase extends GeneratedDatabase {
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
-          await m.createAll();
+          await _createTables();
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
-          if (details.wasCreated) {
+          await _createTables();
+          try {
+            await customStatement('ALTER TABLE students ADD COLUMN photo_path TEXT');
+          } catch (_) {}
+          try {
+            await customStatement('ALTER TABLE users ADD COLUMN photo_path TEXT');
+          } catch (_) {}
+          final userCountRow = await customSelect('SELECT COUNT(*) AS c FROM users').getSingle();
+          if (userCountRow.read<int>('c') == 0) {
             await seedInitialData();
           }
         },
@@ -64,69 +68,196 @@ class AppDatabase extends GeneratedDatabase {
   @override
   List<TableInfo<Table, Object?>> get allTables => [];
 
-  /// Seeds default admin, configuration settings, and starter grade/section.
+  Future<void> _createTables() async {
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'staff',
+        phone TEXT NOT NULL DEFAULT '',
+        staff_category TEXT NOT NULL DEFAULT 'teacher',
+        employee_code TEXT UNIQUE,
+        fingerprint_id TEXT,
+        expected_start_time TEXT NOT NULL DEFAULT '08:00',
+        grace_period_minutes INTEGER NOT NULL DEFAULT 15,
+        attendance_policy TEXT NOT NULL DEFAULT 'standard',
+        status TEXT NOT NULL DEFAULT 'active',
+        session_epoch INTEGER NOT NULL DEFAULT 0,
+        photo_path TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS students (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT UNIQUE NOT NULL,
+        student_code TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        gender TEXT,
+        dob INTEGER,
+        parent_name TEXT NOT NULL DEFAULT '',
+        parent_phone TEXT NOT NULL DEFAULT '',
+        whatsapp_phone TEXT NOT NULL DEFAULT '',
+        notification_opt_in INTEGER NOT NULL DEFAULT 1,
+        enrollment_status TEXT NOT NULL DEFAULT 'enrolled',
+        fingerprint_id TEXT,
+        photo_path TEXT,
+        created_by INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS school_classes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        numeric_grade INTEGER,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS sections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT UNIQUE NOT NULL,
+        class_id INTEGER NOT NULL REFERENCES school_classes(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        room_number TEXT,
+        capacity INTEGER NOT NULL DEFAULT 40,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS student_enrollments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT UNIQUE NOT NULL,
+        student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        class_id INTEGER NOT NULL REFERENCES school_classes(id) ON DELETE CASCADE,
+        section_id INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+        academic_year TEXT NOT NULL,
+        roll_number TEXT,
+        start_date INTEGER NOT NULL,
+        end_date INTEGER,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS school_attendances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT UNIQUE NOT NULL,
+        person_type TEXT NOT NULL,
+        student_id INTEGER REFERENCES students(id) ON DELETE SET NULL,
+        staff_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        date TEXT NOT NULL,
+        check_in_time INTEGER,
+        check_out_time INTEGER,
+        status TEXT NOT NULL DEFAULT 'present',
+        method TEXT NOT NULL DEFAULT 'fingerprint',
+        notes TEXT,
+        recorded_by INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS parent_notification_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT UNIQUE NOT NULL,
+        student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        date TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        recipient_phone TEXT NOT NULL,
+        message TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        scheduled_at INTEGER NOT NULL,
+        sent_at INTEGER,
+        last_error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS notification_delivery_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT UNIQUE NOT NULL,
+        job_id INTEGER NOT NULL REFERENCES parent_notification_jobs(id) ON DELETE CASCADE,
+        attempt_number INTEGER NOT NULL DEFAULT 1,
+        attempted_at INTEGER NOT NULL,
+        provider TEXT NOT NULL DEFAULT 'twilio',
+        provider_message_id TEXT,
+        status TEXT NOT NULL,
+        response_body TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS school_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT UNIQUE NOT NULL,
+        key TEXT UNIQUE NOT NULL,
+        value TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS activity_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_id TEXT UNIQUE NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT,
+        action TEXT NOT NULL,
+        details TEXT,
+        performed_by INTEGER NOT NULL DEFAULT 0,
+        timestamp INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0
+      );
+    ''');
+
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_attendances_date_person ON school_attendances(date, person_type);');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_attendances_student ON school_attendances(student_id);');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_attendances_staff ON school_attendances(staff_id);');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_enrollments_student ON student_enrollments(student_id, status);');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_enrollments_class_sec ON student_enrollments(class_id, section_id, status);');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_notif_jobs_status ON parent_notification_jobs(status, date);');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_users_code ON users(employee_code);');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_students_code ON students(student_code);');
+  }
+
+  /// Seeds default admin, configuration settings, demo students, staff, and attendance.
   Future<void> seedInitialData() async {
-    final now = DateTime.now().millisecondsSinceEpoch;
-
-    // 1. Default admin account: admin@school.local / admin123
-    final passwordHash = sha256.convert(utf8.encode('admin123')).toString();
-    await customInsert(
-      '''
-      INSERT INTO users (
-        sync_id, created_at, updated_at, is_synced,
-        name, email, password_hash, role, phone,
-        staff_category, employee_code, expected_start_time,
-        grace_period_minutes, attendance_policy, status
-      ) VALUES (?, ?, ?, 0, 'System Administrator', 'admin@school.local', ?, 'admin', '0000000000', 'administrator', 'ADM001', '08:00', 15, 'standard', 'active')
-      ''',
-      variables: [Variable(_uuid.v4()), Variable(now), Variable(now), Variable(passwordHash)],
-    );
-
-    // 2. Default School Settings
-    final defaultSettings = {
-      'school_name': 'School Attendance Portal',
-      'student_cutoff_time': '08:30',
-      'attendance_grace_period': '15',
-      'student_id_range_start': '1001',
-      'student_id_range_end': '7999',
-      'staff_id_range_start': '8001',
-      'staff_id_range_end': '8999',
-      'k50_ip': '192.168.1.201',
-      'k50_port': '4370',
-      'k50_bridge_port': '8787',
-      'sms_enabled': 'false',
-      'whatsapp_enabled': 'false',
-      'twilio_account_sid': '',
-      'twilio_auth_token': '',
-      'twilio_from_phone': '',
-      'twilio_whatsapp_from': '',
-      'absence_sms_template': 'Dear Parent, your child {student_name} is marked ABSENT today ({date}). Please contact school admin if this is an error.',
-      'absence_whatsapp_template': 'Dear Parent, your child {student_name} is marked ABSENT today ({date}). Please contact the school office if you need assistance.',
-    };
-
-    for (final entry in defaultSettings.entries) {
-      await settingsDao.setSetting(entry.key, entry.value);
-    }
-
-    // 3. Starter Class & Section
-    final classId = await classesDao.insertClass(
-      name: 'Grade 1',
-      numericGrade: 1,
-      description: 'First Grade Primary Class',
-    );
-
-    await sectionsDao.insertSection(
-      classId: classId,
-      name: 'Section A',
-      roomNumber: '101',
-      capacity: 35,
-    );
-
-    await activityDao.log(
-      entityType: 'system',
-      entityId: '1',
-      action: 'init_database',
-      details: 'Initial school portal database seeded with admin and default settings.',
-    );
+    await DemoSeeder.seed(this);
   }
 }

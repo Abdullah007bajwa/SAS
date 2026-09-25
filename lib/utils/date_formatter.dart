@@ -13,6 +13,11 @@ class DateFormatter {
     return _dateFormat.format(date);
   }
 
+  static String formatDateTime(DateTime? dateTime) {
+    if (dateTime == null) return '—';
+    return _dateTimeFormat.format(dateTime);
+  }
+
   static String formatEpochDate(int? epochMillis) {
     if (epochMillis == null) return '—';
     return _dateFormat.format(DateTime.fromMillisecondsSinceEpoch(epochMillis));

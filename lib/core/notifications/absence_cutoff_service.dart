@@ -1,6 +1,8 @@
 import 'dart:developer' as developer;
+import 'package:drift/drift.dart';
 import '../database/app_database.dart';
 import '../hardware/school_attendance_processor.dart';
+import '../services/school_calendar_service.dart';
 import 'notification_provider.dart';
 
 class CutoffEvaluationResult {
@@ -8,12 +10,14 @@ class CutoffEvaluationResult {
   final int absencesDetected;
   final int smsJobsCreated;
   final int whatsappJobsCreated;
+  final bool isOffDay;
 
   CutoffEvaluationResult({
     required this.totalEnrolled,
     required this.absencesDetected,
     required this.smsJobsCreated,
     required this.whatsappJobsCreated,
+    this.isOffDay = false,
   });
 }
 
@@ -38,11 +42,26 @@ class AbsenceCutoffService {
 
     developer.log('Running daily cutoff absence evaluation for $dateStr...', name: 'AbsenceCutoffService');
 
-    // 1. Mandatory Step: Perform a final K50 poll to flush all pending logs
+    // 1. Fetch notification and calendar settings
+    final settings = await _db.settingsDao.getAllSettings();
+    final weeklyOffDays = settings['weekly_off_days'] ?? 'Sunday';
+    final holidays = settings['school_holidays'];
+
+    // Check if today is a scheduled off-day (Sunday or holiday)
+    if (SchoolCalendarService.isOffDay(now, weeklyOffDays: weeklyOffDays, holidaysStr: holidays)) {
+      developer.log('Date $dateStr is a scheduled off-day/weekend. Skipping absence cutoff evaluation.', name: 'AbsenceCutoffService');
+      return CutoffEvaluationResult(
+        totalEnrolled: 0,
+        absencesDetected: 0,
+        smsJobsCreated: 0,
+        whatsappJobsCreated: 0,
+        isOffDay: true,
+      );
+    }
+
+    // 2. Mandatory Step: Perform a final K50 poll to flush all pending logs
     await _attendanceProcessor.poll();
 
-    // 2. Fetch notification settings and credentials
-    final settings = await _db.settingsDao.getAllSettings();
     final smsEnabled = settings['sms_enabled'] == 'true';
     final whatsappEnabled = settings['whatsapp_enabled'] == 'true';
     final smsTemplate = settings['absence_sms_template'] ??

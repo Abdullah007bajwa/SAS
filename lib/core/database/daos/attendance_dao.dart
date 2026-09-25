@@ -199,6 +199,79 @@ class AttendanceDao extends DatabaseAccessor<AppDatabase> {
     }
   }
 
+  Future<int> insertOrUpdateAttendance({
+    required String personType,
+    int? studentId,
+    int? staffId,
+    required String date,
+    int? checkInTime,
+    int? checkOutTime,
+    String status = 'present',
+    String method = 'fingerprint',
+    String? notes,
+    int recordedBy = 0,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final syncId = _uuid.v4();
+
+    final existing = personType == 'student'
+        ? (studentId != null ? await getStudentAttendanceToday(studentId, date) : null)
+        : (staffId != null ? await getStaffAttendanceToday(staffId, date) : null);
+
+    if (existing != null) {
+      final id = existing.read<int>('id');
+      await customUpdate(
+        '''
+        UPDATE school_attendances
+        SET check_in_time = COALESCE(?, check_in_time),
+            check_out_time = COALESCE(?, check_out_time),
+            status = ?,
+            method = ?,
+            notes = COALESCE(?, notes),
+            updated_at = ?,
+            is_synced = 0
+        WHERE id = ?
+        ''',
+        variables: [
+          Variable(checkInTime),
+          Variable(checkOutTime),
+          Variable(status),
+          Variable(method),
+          Variable(notes),
+          Variable(now),
+          Variable(id),
+        ],
+      );
+      return id;
+    } else {
+      return customInsert(
+        '''
+        INSERT INTO school_attendances (
+          sync_id, created_at, updated_at, is_synced,
+          person_type, student_id, staff_id, date,
+          check_in_time, check_out_time, status, method,
+          notes, recorded_by
+        ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''',
+        variables: [
+          Variable(syncId),
+          Variable(now),
+          Variable(now),
+          Variable(personType),
+          Variable(studentId),
+          Variable(staffId),
+          Variable(date),
+          Variable(checkInTime),
+          Variable(checkOutTime),
+          Variable(status),
+          Variable(method),
+          Variable(notes),
+          Variable(recordedBy),
+        ],
+      );
+    }
+  }
+
   Future<List<AttendanceRecordView>> queryAttendances({
     required String date,
     String? personType, // 'all', 'student', 'staff'
@@ -320,6 +393,45 @@ class AttendanceDao extends DatabaseAccessor<AppDatabase> {
     ''';
 
     final rows = await customSelect(sql, variables: [Variable(limit)]).get();
+    return rows.map(AttendanceRecordView.fromRow).toList();
+  }
+
+  Future<List<AttendanceRecordView>> getAttendanceHistoryForPerson({
+    required String personType,
+    int? studentId,
+    int? staffId,
+    int limit = 100,
+  }) async {
+    final condition = personType == 'student'
+        ? "a.person_type = 'student' AND a.student_id = ?"
+        : "a.person_type = 'staff' AND a.staff_id = ?";
+    final targetId = personType == 'student' ? studentId : staffId;
+
+    final sql = '''
+      SELECT a.*,
+             CASE 
+               WHEN a.person_type = 'student' THEN s.name 
+               ELSE u.name 
+             END AS person_name,
+             CASE 
+               WHEN a.person_type = 'student' THEN s.student_code 
+               ELSE COALESCE(u.employee_code, 'EMP-' || u.id) 
+             END AS person_code,
+             c.name AS class_name,
+             sec.name AS section_name,
+             u.staff_category
+      FROM school_attendances a
+      LEFT JOIN students s ON a.student_id = s.id
+      LEFT JOIN student_enrollments e ON s.id = e.student_id AND e.status = 'active'
+      LEFT JOIN school_classes c ON e.class_id = c.id
+      LEFT JOIN sections sec ON e.section_id = sec.id
+      LEFT JOIN users u ON a.staff_id = u.id
+      WHERE $condition
+      ORDER BY a.date DESC, a.check_in_time DESC
+      LIMIT ?
+    ''';
+
+    final rows = await customSelect(sql, variables: [Variable(targetId), Variable(limit)]).get();
     return rows.map(AttendanceRecordView.fromRow).toList();
   }
 }

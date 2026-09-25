@@ -22,6 +22,7 @@ class StudentWithEnrollment {
   final int? classId;
   final int? sectionId;
   final String? rollNumber;
+  final String? photoPath;
 
   StudentWithEnrollment({
     required this.id,
@@ -41,6 +42,7 @@ class StudentWithEnrollment {
     this.classId,
     this.sectionId,
     this.rollNumber,
+    this.photoPath,
   });
 
   factory StudentWithEnrollment.fromRow(QueryRow row) {
@@ -62,6 +64,7 @@ class StudentWithEnrollment {
       classId: row.readNullable<int>('class_id'),
       sectionId: row.readNullable<int>('section_id'),
       rollNumber: row.readNullable<String>('roll_number'),
+      photoPath: row.readNullable<String>('photo_path'),
     );
   }
 }
@@ -141,6 +144,10 @@ class StudentsDao extends DatabaseAccessor<AppDatabase> {
     return StudentWithEnrollment.fromRow(rows.first);
   }
 
+  Future<StudentWithEnrollment?> getStudentByCode(String code) async {
+    return findByCodeOrFingerprint(code);
+  }
+
   Future<StudentWithEnrollment?> findByCodeOrFingerprint(String code) async {
     final trimmed = code.trim();
     final rows = await customSelect(
@@ -174,6 +181,7 @@ class StudentsDao extends DatabaseAccessor<AppDatabase> {
     int notificationOptIn = 1,
     String enrollmentStatus = 'enrolled',
     String? fingerprintId,
+    String? photoPath,
     int? createdBy,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -185,8 +193,8 @@ class StudentsDao extends DatabaseAccessor<AppDatabase> {
         sync_id, created_at, updated_at, is_synced,
         student_code, name, gender, dob, parent_name,
         parent_phone, whatsapp_phone, notification_opt_in,
-        enrollment_status, fingerprint_id, created_by
-      ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        enrollment_status, fingerprint_id, photo_path, created_by
+      ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ''',
       variables: [
         Variable(syncId),
@@ -202,6 +210,7 @@ class StudentsDao extends DatabaseAccessor<AppDatabase> {
         Variable(notificationOptIn),
         Variable(enrollmentStatus),
         Variable(fingerprintId),
+        Variable(photoPath),
         Variable(createdBy),
       ],
     );
@@ -218,6 +227,7 @@ class StudentsDao extends DatabaseAccessor<AppDatabase> {
     int? notificationOptIn,
     String? enrollmentStatus,
     String? fingerprintId,
+    String? photoPath,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final updates = <String>['updated_at = ?', 'is_synced = 0'];
@@ -258,6 +268,10 @@ class StudentsDao extends DatabaseAccessor<AppDatabase> {
     if (fingerprintId != null) {
       updates.add('fingerprint_id = ?');
       variables.add(Variable(fingerprintId));
+    }
+    if (photoPath != null) {
+      updates.add('photo_path = ?');
+      variables.add(Variable(photoPath));
     }
 
     variables.add(Variable(id));

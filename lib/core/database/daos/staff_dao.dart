@@ -18,6 +18,7 @@ class StaffUserData {
   final int gracePeriodMinutes;
   final String attendancePolicy;
   final String status;
+  final String? photoPath;
 
   StaffUserData({
     required this.id,
@@ -33,6 +34,7 @@ class StaffUserData {
     required this.gracePeriodMinutes,
     required this.attendancePolicy,
     required this.status,
+    this.photoPath,
   });
 
   factory StaffUserData.fromRow(QueryRow row) {
@@ -50,6 +52,7 @@ class StaffUserData {
       gracePeriodMinutes: row.read<int>('grace_period_minutes'),
       attendancePolicy: row.read<String>('attendance_policy'),
       status: row.read<String>('status'),
+      photoPath: row.readNullable<String>('photo_path'),
     );
   }
 }
@@ -96,6 +99,16 @@ class StaffDao extends DatabaseAccessor<AppDatabase> {
     return StaffUserData.fromRow(rows.first);
   }
 
+  Future<StaffUserData?> getStaffByEmployeeCode(String employeeCode) async {
+    final trimmed = employeeCode.trim();
+    final rows = await customSelect(
+      'SELECT * FROM users WHERE employee_code = ? LIMIT 1',
+      variables: [Variable(trimmed)],
+    ).get();
+    if (rows.isEmpty) return null;
+    return StaffUserData.fromRow(rows.first);
+  }
+
   Future<StaffUserData?> findByCodeOrFingerprint(String code) async {
     final trimmed = code.trim();
     final rows = await customSelect(
@@ -119,6 +132,7 @@ class StaffDao extends DatabaseAccessor<AppDatabase> {
     int gracePeriodMinutes = 15,
     String attendancePolicy = 'standard',
     String status = 'active',
+    String? photoPath,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final syncId = _uuid.v4();
@@ -130,8 +144,8 @@ class StaffDao extends DatabaseAccessor<AppDatabase> {
         name, email, password_hash, role, phone,
         staff_category, employee_code, fingerprint_id,
         expected_start_time, grace_period_minutes,
-        attendance_policy, status
-      ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        attendance_policy, status, photo_path
+      ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ''',
       variables: [
         Variable(syncId),
@@ -149,6 +163,7 @@ class StaffDao extends DatabaseAccessor<AppDatabase> {
         Variable(gracePeriodMinutes),
         Variable(attendancePolicy),
         Variable(status),
+        Variable(photoPath),
       ],
     );
   }
@@ -165,6 +180,7 @@ class StaffDao extends DatabaseAccessor<AppDatabase> {
     int? gracePeriodMinutes,
     String? attendancePolicy,
     String? status,
+    String? photoPath,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final updates = <String>['updated_at = ?', 'is_synced = 0'];
@@ -209,6 +225,10 @@ class StaffDao extends DatabaseAccessor<AppDatabase> {
     if (status != null) {
       updates.add('status = ?');
       variables.add(Variable(status));
+    }
+    if (photoPath != null) {
+      updates.add('photo_path = ?');
+      variables.add(Variable(photoPath));
     }
 
     variables.add(Variable(id));

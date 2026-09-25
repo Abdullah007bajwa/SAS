@@ -17,6 +17,7 @@ class Users extends Table with SyncColumns {
   TextColumn get attendancePolicy => text().withDefault(const Constant('standard'))(); // standard, flexible, strict
   TextColumn get status => text().withDefault(const Constant('active'))(); // active, inactive
   IntColumn get sessionEpoch => integer().withDefault(const Constant(0))();
+  TextColumn get photoPath => text().nullable()();
 }
 
 /// Students registered in the school.
@@ -32,6 +33,7 @@ class Students extends Table with SyncColumns {
   IntColumn get notificationOptIn => integer().withDefault(const Constant(1))(); // 1 = true, 0 = false
   TextColumn get enrollmentStatus => text().withDefault(const Constant('enrolled'))(); // enrolled, withdrawn, suspended, graduated
   TextColumn get fingerprintId => text().nullable()();
+  TextColumn get photoPath => text().nullable()();
   IntColumn get createdBy => integer().nullable()();
 }
 
