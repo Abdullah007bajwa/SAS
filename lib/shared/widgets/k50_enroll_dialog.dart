@@ -24,6 +24,7 @@ class K50EnrollDialog extends ConsumerStatefulWidget {
     required this.personCode,
     required this.personName,
     this.existingFingerprintId,
+    this.overrideDeviceUserId,
     this.onEnrollmentSuccess,
   });
 
@@ -32,6 +33,7 @@ class K50EnrollDialog extends ConsumerStatefulWidget {
   final String personCode;
   final String personName;
   final String? existingFingerprintId;
+  final String? overrideDeviceUserId;
   final VoidCallback? onEnrollmentSuccess;
 
   static Future<void> show(
@@ -41,6 +43,7 @@ class K50EnrollDialog extends ConsumerStatefulWidget {
     required String personCode,
     required String personName,
     String? existingFingerprintId,
+    String? overrideDeviceUserId,
     VoidCallback? onEnrollmentSuccess,
   }) {
     return showDialog(
@@ -52,6 +55,7 @@ class K50EnrollDialog extends ConsumerStatefulWidget {
         personCode: personCode,
         personName: personName,
         existingFingerprintId: existingFingerprintId,
+        overrideDeviceUserId: overrideDeviceUserId,
         onEnrollmentSuccess: onEnrollmentSuccess,
       ),
     );
@@ -79,8 +83,38 @@ class _K50EnrollDialogState extends ConsumerState<K50EnrollDialog> {
   ];
 
   /// The K50 firmware strictly requires numeric IDs (1 - 99999999).
-  /// Students map to 1001-7999, staff to 8001-8999.
+  /// Students map to 1001-7999 (or class-aware e.g. 3117, 10118), staff to 8001-8999.
   String get _numericDeviceUserId {
+    if (widget.overrideDeviceUserId != null && widget.overrideDeviceUserId!.trim().isNotEmpty) {
+      return widget.overrideDeviceUserId!.trim();
+    }
+
+    // Check remembered mapping in SharedPreferences
+    final mappedDevice = ref.read(k50DeviceUserMapProvider).deviceUserIdForPersonCode(widget.personCode);
+    if (mappedDevice != null && mappedDevice.isNotEmpty) {
+      return mappedDevice;
+    }
+
+    // Check existing fingerprint ID: e.g. FP-3117 -> 3117
+    if (widget.existingFingerprintId != null) {
+      final fpDigits = IdGenerator.extractNumeric(widget.existingFingerprintId!);
+      if (fpDigits != null && fpDigits.isNotEmpty) return fpDigits;
+    }
+
+    // Check class-aware code format: e.g. C3A-017 or C10A-018
+    final classAwareMatch = RegExp(r'^[A-Za-z]+(\d+)([A-Za-z]+)-?(\d+)$').firstMatch(widget.personCode.trim());
+    if (classAwareMatch != null) {
+      final classLvl = int.tryParse(classAwareMatch.group(1)!) ?? 1;
+      final secLetter = classAwareMatch.group(2)!;
+      final seq = int.tryParse(classAwareMatch.group(3)!) ?? 1;
+      final autoId = IdGenerator.generateClassAwareBiometricId(
+        classLevel: classLvl,
+        sectionName: secLetter,
+        sequence: seq,
+      );
+      return '$autoId';
+    }
+
     final rawDigits = IdGenerator.extractNumeric(widget.personCode);
     final parsed = int.tryParse(rawDigits ?? '');
 

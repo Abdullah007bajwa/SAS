@@ -162,9 +162,9 @@ class StudentsDao extends DatabaseAccessor<AppDatabase> {
       LEFT JOIN student_enrollments e ON s.id = e.student_id AND e.status = 'active'
       LEFT JOIN school_classes c ON e.class_id = c.id
       LEFT JOIN sections sec ON e.section_id = sec.id
-      WHERE s.student_code = ? OR s.fingerprint_id = ? LIMIT 1
+      WHERE s.student_code = ? OR s.fingerprint_id = ? OR e.roll_number = ? LIMIT 1
       ''',
-      variables: [Variable(trimmed), Variable(trimmed)],
+      variables: [Variable(trimmed), Variable(trimmed), Variable(trimmed)],
     ).get();
     if (rows.isEmpty) return null;
     return StudentWithEnrollment.fromRow(rows.first);
@@ -218,6 +218,7 @@ class StudentsDao extends DatabaseAccessor<AppDatabase> {
 
   Future<int> updateStudent(
     int id, {
+    String? studentCode,
     String? name,
     String? gender,
     int? dob,
@@ -233,6 +234,10 @@ class StudentsDao extends DatabaseAccessor<AppDatabase> {
     final updates = <String>['updated_at = ?', 'is_synced = 0'];
     final variables = <Variable>[Variable(now)];
 
+    if (studentCode != null && studentCode.trim().isNotEmpty) {
+      updates.add('student_code = ?');
+      variables.add(Variable(studentCode.trim()));
+    }
     if (name != null) {
       updates.add('name = ?');
       variables.add(Variable(name));

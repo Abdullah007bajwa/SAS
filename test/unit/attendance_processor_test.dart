@@ -128,5 +128,87 @@ void main() {
       final occurrences = records.where((r) => r.personCode == 'STU-1002').toList();
       expect(occurrences.length, equals(1));
     });
+
+    test('Punch updates student who was previously marked absent by auto-cutoff', () async {
+      final now = DateTime.now();
+      final dateStr = '${now.year.toString().padLeft(4, '0')}-'
+          '${now.month.toString().padLeft(2, '0')}-'
+          '${now.day.toString().padLeft(2, '0')}';
+
+      final studentId = await db.studentsDao.insertStudent(
+        studentCode: 'STU-1099',
+        name: 'Late Student',
+        parentName: 'Parent',
+        parentPhone: '+923000000000',
+      );
+
+      // Simulate cutoff marking student absent earlier in the day
+      await db.attendanceDao.insertOrUpdateAttendance(
+        personType: 'student',
+        studentId: studentId,
+        date: dateStr,
+        status: 'absent',
+        method: 'system',
+      );
+
+      final initial = await db.attendanceDao.getStudentAttendanceToday(studentId, dateStr);
+      expect(initial!.read<String>('status'), 'absent');
+      expect(initial.read<int?>('check_in_time'), isNull);
+
+      // Student arrives and scans thumb on K50
+      final scanTime = DateTime(now.year, now.month, now.day, 9, 15);
+      final log = LogEntry(
+        userId: '1099',
+        deviceUserId: '1099',
+        timestamp: scanTime,
+        verifyType: 1,
+      );
+
+      await processor.applyLogs([log]);
+
+      final updated = await db.attendanceDao.getStudentAttendanceToday(studentId, dateStr);
+      expect(updated, isNotNull);
+      expect(updated!.read<String>('status'), 'late'); // Arrived after 08:30 cutoff
+      expect(updated.read<int?>('check_in_time'), scanTime.millisecondsSinceEpoch);
+      expect(updated.read<String>('method'), 'fingerprint');
+    });
+
+    test('Class-aware biometric ID resolves and records student punch', () async {
+      final now = DateTime.now();
+      final dateStr = '${now.year.toString().padLeft(4, '0')}-'
+          '${now.month.toString().padLeft(2, '0')}-'
+          '${now.day.toString().padLeft(2, '0')}';
+
+      // Insert a student with class-aware code: Class 3, Section A, Roll 17 -> C3A-017
+      final studentId = await db.studentsDao.insertStudent(
+        studentCode: 'C3A-017',
+        name: 'Abdullah Test',
+        parentName: 'Parent',
+        parentPhone: '+923001234567',
+        fingerprintId: 'FP-3117',
+      );
+      await db.enrollmentsDao.enrollStudent(
+        studentId: studentId,
+        classId: 3,
+        sectionId: 4, // Section 3-A
+        academicYear: '2026-2027',
+        rollNumber: '17',
+      );
+
+      // K50 logs biometric ID 3117
+      final log = LogEntry(
+        userId: '3117',
+        deviceUserId: '3117',
+        timestamp: DateTime(now.year, now.month, now.day, 8, 15),
+        verifyType: 1,
+      );
+
+      await processor.applyLogs([log]);
+
+      final record = await db.attendanceDao.getStudentAttendanceToday(studentId, dateStr);
+      expect(record, isNotNull);
+      expect(record!.read<String>('status'), 'present');
+      expect(record.read<int?>('check_in_time'), isNotNull);
+    });
   });
 }

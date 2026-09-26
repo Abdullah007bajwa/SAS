@@ -287,14 +287,51 @@ class StudentsScreen extends ConsumerWidget {
     if (!context.mounted) return;
 
     final nameCtrl = TextEditingController();
+    final studentCodeCtrl = TextEditingController();
+    final rollNumberCtrl = TextEditingController();
+    final biometricIdCtrl = TextEditingController();
     final parentNameCtrl = TextEditingController();
     final parentPhoneCtrl = TextEditingController();
     final whatsappPhoneCtrl = TextEditingController();
 
     int? selectedClassId = classes.isNotEmpty ? classes.first.id : null;
-    int? selectedSectionId = sections.isNotEmpty ? sections.first.id : null;
+    final initialSections = sections.where((s) => s.classId == selectedClassId).toList();
+    int? selectedSectionId = initialSections.isNotEmpty ? initialSections.first.id : null;
     bool notificationOptIn = true;
     String? selectedPhotoPath;
+
+    Future<void> recalculateIdentifiers() async {
+      if (selectedClassId != null && selectedSectionId != null) {
+        final cls = classes.firstWhere((c) => c.id == selectedClassId, orElse: () => classes.first);
+        final sec = sections.firstWhere((s) => s.id == selectedSectionId, orElse: () => sections.first);
+        final count = await db.enrollmentsDao.countEnrolledInClassSection(cls.id, sec.id);
+        final seq = count + 1;
+        final classLevel = cls.numericGrade ?? cls.id;
+
+        studentCodeCtrl.text = IdGenerator.formatClassAwareStudentCode(
+          classLevel: classLevel,
+          sectionName: sec.name,
+          sequence: seq,
+        );
+        biometricIdCtrl.text = '${IdGenerator.generateClassAwareBiometricId(
+          classLevel: classLevel,
+          sectionName: sec.name,
+          sequence: seq,
+        )}';
+        rollNumberCtrl.text = '$seq';
+      } else {
+        final rangeStart = int.tryParse(await db.settingsDao.getSetting('student_id_range_start', defaultValue: '1001')) ?? 1001;
+        final count = await db.studentsDao.countActiveStudents();
+        final nextNum = rangeStart + count;
+        studentCodeCtrl.text = IdGenerator.formatStudentCode(nextNum);
+        biometricIdCtrl.text = '$nextNum';
+        rollNumberCtrl.text = '${count + 1}';
+      }
+    }
+
+    await recalculateIdentifiers();
+
+    if (!context.mounted) return;
 
     showDialog(
       context: context,
@@ -305,7 +342,7 @@ class StudentsScreen extends ConsumerWidget {
           return AlertDialog(
             title: const Text('Enroll New Student'),
             content: SizedBox(
-              width: 500,
+              width: 520,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -358,24 +395,20 @@ class StudentsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 14),
 
-                    TextField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(labelText: 'Student Full Name *'),
-                    ),
-                    const SizedBox(height: 12),
+                    // Class and Section Selection (Determines Code and Biometric ID)
                     Row(
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<int>(
                             initialValue: selectedClassId,
-                            decoration: const InputDecoration(labelText: 'Class / Grade'),
+                            decoration: const InputDecoration(labelText: 'Class / Grade *'),
                             items: classes.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-                            onChanged: (val) {
-                              setDialogState(() {
-                                selectedClassId = val;
-                                final sub = sections.where((s) => s.classId == val).toList();
-                                selectedSectionId = sub.isNotEmpty ? sub.first.id : null;
-                              });
+                            onChanged: (val) async {
+                              selectedClassId = val;
+                              final sub = sections.where((s) => s.classId == val).toList();
+                              selectedSectionId = sub.isNotEmpty ? sub.first.id : null;
+                              await recalculateIdentifiers();
+                              setDialogState(() {});
                             },
                           ),
                         ),
@@ -383,12 +416,74 @@ class StudentsScreen extends ConsumerWidget {
                         Expanded(
                           child: DropdownButtonFormField<int>(
                             initialValue: selectedSectionId,
-                            decoration: const InputDecoration(labelText: 'Section'),
+                            decoration: const InputDecoration(labelText: 'Section *'),
                             items: filteredSections.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
-                            onChanged: (val) => setDialogState(() => selectedSectionId = val),
+                            onChanged: (val) async {
+                              selectedSectionId = val;
+                              await recalculateIdentifiers();
+                              setDialogState(() {});
+                            },
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Class-aware Student Code & Roll Number
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: studentCodeCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Student Code *',
+                              hintText: 'e.g. C3A-017',
+                              prefixIcon: Icon(Icons.badge_outlined, size: 20),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: rollNumberCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Roll No.',
+                              hintText: '17',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Numeric K50 Terminal Biometric ID
+                    TextField(
+                      controller: biometricIdCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'K50 Terminal Biometric ID (Numeric) *',
+                        hintText: 'e.g. 3117',
+                        helperText: 'Hardware user ID on K50 optical sensor (Digits only). E.g. Class 3 Sec A Roll 17 -> 3117',
+                        helperMaxLines: 2,
+                        prefixIcon: const Icon(Icons.fingerprint, size: 20, color: AppColors.primary),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.refresh, size: 20),
+                          tooltip: 'Recalculate from Class & Section',
+                          onPressed: () async {
+                            await recalculateIdentifiers();
+                            setDialogState(() {});
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(labelText: 'Student Full Name *'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -422,14 +517,12 @@ class StudentsScreen extends ConsumerWidget {
                 onPressed: () async {
                   if (nameCtrl.text.trim().isEmpty) return;
 
-                  // Allocate next numeric student code
-                  final int rangeStart = int.tryParse(await db.settingsDao.getSetting('student_id_range_start', defaultValue: '1001')) ?? 1001;
-                  final int count = await db.studentsDao.countActiveStudents();
-                  final int nextNumeric = rangeStart + count;
-                  final studentCode = IdGenerator.formatStudentCode(nextNumeric);
+                  final studentCode = studentCodeCtrl.text.trim();
+                  final biometricId = biometricIdCtrl.text.trim();
+                  final rollNumber = rollNumberCtrl.text.trim();
 
                   final studentId = await db.studentsDao.insertStudent(
-                    studentCode: studentCode,
+                    studentCode: studentCode.isNotEmpty ? studentCode : IdGenerator.formatStudentCode(1001),
                     name: nameCtrl.text.trim(),
                     parentName: parentNameCtrl.text.trim(),
                     parentPhone: parentPhoneCtrl.text.trim(),
@@ -441,7 +534,9 @@ class StudentsScreen extends ConsumerWidget {
                   );
 
                   // Map K50 numeric ID to student code
-                  await userMap.remember('$nextNumeric', studentCode);
+                  if (biometricId.isNotEmpty) {
+                    await userMap.remember(biometricId, studentCode);
+                  }
 
                   // Enroll in class/section
                   if (selectedClassId != null && selectedSectionId != null) {
@@ -450,6 +545,7 @@ class StudentsScreen extends ConsumerWidget {
                       classId: selectedClassId!,
                       sectionId: selectedSectionId!,
                       academicYear: '2026-2027',
+                      rollNumber: rollNumber.isNotEmpty ? rollNumber : null,
                     );
                   }
 
@@ -475,6 +571,11 @@ class StudentsScreen extends ConsumerWidget {
                             Text(
                               '$studentCode — ${nameCtrl.text.trim()} has been registered in the database.',
                               style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Assigned K50 Biometric User ID: $biometricId',
+                              style: const TextStyle(fontSize: 13, color: AppColors.primary, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 12),
                             const Text(
@@ -504,6 +605,7 @@ class StudentsScreen extends ConsumerWidget {
                         personId: studentId,
                         personCode: studentCode,
                         personName: nameCtrl.text.trim(),
+                        overrideDeviceUserId: biometricId.isNotEmpty ? biometricId : null,
                         onEnrollmentSuccess: () => ref.invalidate(studentListProvider),
                       );
                     }
@@ -520,12 +622,15 @@ class StudentsScreen extends ConsumerWidget {
 
   void _showEditStudentDialog(BuildContext context, WidgetRef ref, StudentWithEnrollment student) async {
     final db = ref.read(appDatabaseProvider);
+    final userMap = ref.read(k50DeviceUserMapProvider);
     final classes = await db.classesDao.getAllClasses();
     final sections = await db.sectionsDao.getAllSections();
 
     if (!context.mounted) return;
 
     final nameCtrl = TextEditingController(text: student.name);
+    final studentCodeCtrl = TextEditingController(text: student.studentCode);
+    final rollNumberCtrl = TextEditingController(text: student.rollNumber ?? '');
     final parentNameCtrl = TextEditingController(text: student.parentName);
     final parentPhoneCtrl = TextEditingController(text: student.parentPhone);
     final whatsappPhoneCtrl = TextEditingController(text: student.whatsappPhone);
@@ -551,7 +656,7 @@ class StudentsScreen extends ConsumerWidget {
               ],
             ),
             content: SizedBox(
-              width: 500,
+              width: 520,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -603,11 +708,8 @@ class StudentsScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 14),
-                    TextField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(labelText: 'Student Full Name *'),
-                    ),
-                    const SizedBox(height: 12),
+
+                    // Class and Section Selection
                     Row(
                       children: [
                         Expanded(
@@ -634,6 +736,39 @@ class StudentsScreen extends ConsumerWidget {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Student Code & Roll Number
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: studentCodeCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Student Code *',
+                              prefixIcon: Icon(Icons.badge_outlined, size: 20),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: rollNumberCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Roll No.',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(labelText: 'Student Full Name *'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -681,9 +816,13 @@ class StudentsScreen extends ConsumerWidget {
                 onPressed: () async {
                   if (nameCtrl.text.trim().isEmpty) return;
 
+                  final newCode = studentCodeCtrl.text.trim();
+                  final newRoll = rollNumberCtrl.text.trim();
+
                   // Update student row
                   await db.studentsDao.updateStudent(
                     student.id,
+                    studentCode: newCode.isNotEmpty ? newCode : null,
                     name: nameCtrl.text.trim(),
                     parentName: parentNameCtrl.text.trim(),
                     parentPhone: parentPhoneCtrl.text.trim(),
@@ -693,14 +832,20 @@ class StudentsScreen extends ConsumerWidget {
                     photoPath: selectedPhotoPath,
                   );
 
-                  // If class or section changed, update enrollment
-                  if (selectedClassId != null && selectedSectionId != null &&
-                      (selectedClassId != student.classId || selectedSectionId != student.sectionId)) {
+                  // Update device user map
+                  final existingDeviceId = userMap.deviceUserIdForPersonCode(student.studentCode);
+                  if (existingDeviceId != null && newCode.isNotEmpty) {
+                    await userMap.remember(existingDeviceId, newCode);
+                  }
+
+                  // If class, section or roll changed, update enrollment
+                  if (selectedClassId != null && selectedSectionId != null) {
                     await db.enrollmentsDao.enrollStudent(
                       studentId: student.id,
                       classId: selectedClassId!,
                       sectionId: selectedSectionId!,
                       academicYear: '2026-2027',
+                      rollNumber: newRoll.isNotEmpty ? newRoll : null,
                     );
                   }
 

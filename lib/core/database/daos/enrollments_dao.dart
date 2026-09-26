@@ -48,4 +48,16 @@ class StudentEnrollmentsDao extends DatabaseAccessor<AppDatabase> {
       ],
     );
   }
+
+  Future<int> countEnrolledInClassSection(int classId, int sectionId) async {
+    final rows = await customSelect(
+      '''
+      SELECT COUNT(*) AS c 
+      FROM student_enrollments 
+      WHERE class_id = ? AND section_id = ? AND status = 'active'
+      ''',
+      variables: [Variable(classId), Variable(sectionId)],
+    ).get();
+    return rows.first.read<int>('c');
+  }
 }

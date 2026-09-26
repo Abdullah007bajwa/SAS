@@ -30,6 +30,8 @@ final k50BridgeLauncherProvider = Provider<K50BridgeLauncherService>((ref) {
   return K50BridgeLauncherService();
 });
 
+final attendanceUpdateSignalProvider = StateProvider<int>((ref) => 0);
+
 final schoolAttendanceProcessorProvider = Provider<SchoolAttendanceProcessor>((ref) {
   final db = ref.watch(appDatabaseProvider);
   final client = ref.watch(zkBackendClientProvider);
@@ -41,5 +43,8 @@ final schoolAttendanceProcessorProvider = Provider<SchoolAttendanceProcessor>((r
     backendClient: client,
     dedup: dedup,
     deviceUserMap: userMap,
+    onAttendanceChanged: () {
+      ref.read(attendanceUpdateSignalProvider.notifier).state++;
+    },
   );
 });

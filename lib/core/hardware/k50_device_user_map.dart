@@ -36,4 +36,13 @@ class K50DeviceUserMap {
     if (deviceUserId == null || deviceUserId.trim().isEmpty) return null;
     return load()[deviceUserId.trim()];
   }
+
+  String? deviceUserIdForPersonCode(String? appCode) {
+    if (appCode == null || appCode.trim().isEmpty) return null;
+    final target = appCode.trim();
+    for (final entry in load().entries) {
+      if (entry.value == target) return entry.key;
+    }
+    return null;
+  }
 }

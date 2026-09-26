@@ -16,6 +16,7 @@ import '../attendance/attendance_screen.dart';
 final dashboardDateProvider = StateProvider<DateTime>((ref) => DateTime.now());
 
 final dashboardStatsProvider = FutureProvider.autoDispose((ref) async {
+  ref.watch(attendanceUpdateSignalProvider);
   final db = ref.watch(appDatabaseProvider);
   final selectedDate = ref.watch(dashboardDateProvider);
   final dateStr = DateFormatter.toIsoDateString(selectedDate);

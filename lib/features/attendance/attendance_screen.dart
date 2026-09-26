@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/database_provider.dart';
+import '../../core/hardware/hardware_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/status_badge.dart';
 import '../../utils/date_formatter.dart';
@@ -11,6 +12,7 @@ final attendanceFilterClassProvider = StateProvider<int?>((ref) => null);
 final attendanceFilterStatusProvider = StateProvider<String>((ref) => 'all'); // all, present, late, absent
 
 final attendanceListProvider = FutureProvider.autoDispose((ref) async {
+  ref.watch(attendanceUpdateSignalProvider);
   final db = ref.watch(appDatabaseProvider);
   final date = ref.watch(attendanceFilterDateProvider);
   final role = ref.watch(attendanceFilterRoleProvider);

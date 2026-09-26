@@ -180,6 +180,13 @@ def get_attendance(since: Optional[str] = None, limit: int = 200):
             return logs
         except Exception as e:
             logger.error(f"Error reading attendance: {e}")
+            _is_connected = False
+            if _conn:
+                try:
+                    _conn.disconnect()
+                except Exception:
+                    pass
+                _conn = None
             return []
 
 @app.post("/device/fingerprint/enroll")
@@ -189,26 +196,48 @@ def enroll_fingerprint(req: EnrollRequest):
         if not conn:
             raise HTTPException(status_code=503, detail={"success": False, "error": "Device offline", "errorCode": "DEVICE_OFFLINE"})
         try:
-            # Set user on device if not present
+            from zk import const
+            from struct import pack
+            
             user_id = str(req.userId)
             name = req.name or user_id
-            conn.set_user(uid=int(user_id) if user_id.isdigit() else 1, name=name, privilege=0, password='', group_id='', user_id=user_id)
+            finger_index = req.fingerIndex or 0
             
-            # Start enrollment on device: ZK enrollment command
-            conn.enroll_user(uid=user_id)
+            # 1. Ensure user is created on device with unique numeric uid
+            users = conn.get_users()
+            existing = [u for u in users if str(u.user_id) == user_id]
+            if existing:
+                uid = existing[0].uid
+            else:
+                max_uid = max([u.uid for u in users] or [0])
+                uid = max_uid + 1
+            
+            conn.set_user(uid=uid, name=name, privilege=0, password='', group_id='', user_id=user_id)
+            logger.info(f"Set user for enrollment: uid={uid}, user_id={user_id}, name={name}")
+            
+            # 2. Send STARTENROLL command directly to trigger K50 screen prompt
+            conn.cancel_capture()
+            command_string = pack('<24sbb', str(user_id).encode(), finger_index, 1)
+            res = conn._ZK__send_command(const.CMD_STARTENROLL, command_string)
+            logger.info(f"CMD_STARTENROLL returned: {res}")
+            
+            cmd_ok = res.get('status') == True
             return {
-                "success": True,
-                "remoteModeStarted": True,
+                "success": cmd_ok,
+                "remoteModeStarted": cmd_ok,
+                "requiresOnDevice": not cmd_ok,
                 "deviceUserId": user_id,
-                "enrollState": "ENROLL_STARTED",
-                "verified": False
+                "enrollState": "ENROLL_STARTED" if cmd_ok else "PENDING",
+                "verified": False,
+                "error": None if cmd_ok else "Device did not accept start enroll command"
             }
         except Exception as e:
             logger.error(f"Enrollment error: {e}")
             return {
                 "success": False,
                 "error": str(e),
-                "errorCode": "ENROLL_FAILED"
+                "errorCode": "ENROLL_FAILED",
+                "requiresOnDevice": True
             }
 
 @app.post("/device/fingerprint/verify")
@@ -218,16 +247,31 @@ def verify_fingerprint(req: UserRequest):
         if not conn:
             return {"success": False, "verified": False, "error": "Device offline"}
         try:
-            templates = conn.get_templates()
             user_id = str(req.userId)
-            has_template = any(str(t.uid) == user_id or str(t.user_id) == user_id for t in templates)
+            
+            # Map user_id to internal uid on K50
+            users = conn.get_users()
+            target_uids = [u.uid for u in users if str(u.user_id) == user_id or str(u.uid) == user_id]
+            if user_id.isdigit():
+                target_uids.append(int(user_id))
+            
+            templates = conn.get_templates()
+            has_template = any(t.uid in target_uids for t in templates)
+            
+            template_id = None
+            if has_template:
+                template_id = f"FP-{user_id}"
+                
+            logger.info(f"Verify fingerprint for user_id={user_id} (uids={target_uids}): has_template={has_template}")
             return {
                 "success": True,
                 "verified": has_template,
+                "templateId": template_id,
                 "deviceUserId": user_id,
                 "enrollState": "COMPLETED" if has_template else "IN_PROGRESS"
             }
         except Exception as e:
+            logger.error(f"Error in verify_fingerprint: {e}")
             return {"success": False, "verified": False, "error": str(e)}
 
 @app.post("/device/user/create")

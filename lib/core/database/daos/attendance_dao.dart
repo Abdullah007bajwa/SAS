@@ -109,13 +109,57 @@ class AttendanceDao extends DatabaseAccessor<AppDatabase> {
         '${timestamp.month.toString().padLeft(2, '0')}-'
         '${timestamp.day.toString().padLeft(2, '0')}';
     final existing = await getStudentAttendanceToday(studentId, dateStr);
+    final now = DateTime.now().millisecondsSinceEpoch;
 
     if (existing != null) {
-      // Already has a record for today
-      return existing.read<int>('id');
+      final existingCheckIn = existing.readNullable<int>('check_in_time');
+      final attendanceId = existing.read<int>('id');
+
+      if (existingCheckIn == null) {
+        // Previously marked absent (e.g. by auto-cutoff or manual mark).
+        // Student arrived! Update record to check-in with proper status.
+        await customUpdate(
+          '''
+          UPDATE school_attendances
+          SET check_in_time = ?, status = ?, method = ?, notes = ?, updated_at = ?, is_synced = 0
+          WHERE id = ?
+          ''',
+          variables: [
+            Variable(timestamp.millisecondsSinceEpoch),
+            Variable(status),
+            Variable(method),
+            Variable(notes),
+            Variable(now),
+            Variable(attendanceId),
+          ],
+        );
+        return attendanceId;
+      }
+
+      // If already checked in and has no check-out, record check-out if scan is later
+      final existingCheckOut = existing.readNullable<int>('check_out_time');
+      final scanMs = timestamp.millisecondsSinceEpoch;
+      if (existingCheckOut == null && scanMs > existingCheckIn) {
+        // Debounce: check-out only if at least 2 minutes have passed since check-in
+        if (scanMs - existingCheckIn > 2 * 60 * 1000) {
+          await customUpdate(
+            '''
+            UPDATE school_attendances
+            SET check_out_time = ?, updated_at = ?, is_synced = 0
+            WHERE id = ?
+            ''',
+            variables: [
+              Variable(scanMs),
+              Variable(now),
+              Variable(attendanceId),
+            ],
+          );
+        }
+      }
+
+      return attendanceId;
     }
 
-    final now = DateTime.now().millisecondsSinceEpoch;
     final syncId = _uuid.v4();
 
     return customInsert(
@@ -181,20 +225,47 @@ class AttendanceDao extends DatabaseAccessor<AppDatabase> {
         ],
       );
     } else {
-      // Second scan: Check-out
+      final existingCheckIn = existing.readNullable<int>('check_in_time');
       final attendanceId = existing.read<int>('id');
-      await customUpdate(
-        '''
-        UPDATE school_attendances
-        SET check_out_time = ?, updated_at = ?, is_synced = 0
-        WHERE id = ?
-        ''',
-        variables: [
-          Variable(timestamp.millisecondsSinceEpoch),
-          Variable(now),
-          Variable(attendanceId),
-        ],
-      );
+
+      if (existingCheckIn == null) {
+        // Staff was previously marked absent; update to checked-in
+        await customUpdate(
+          '''
+          UPDATE school_attendances
+          SET check_in_time = ?, status = ?, method = ?, updated_at = ?, is_synced = 0
+          WHERE id = ?
+          ''',
+          variables: [
+            Variable(timestamp.millisecondsSinceEpoch),
+            Variable(status),
+            Variable(method),
+            Variable(now),
+            Variable(attendanceId),
+          ],
+        );
+        return attendanceId;
+      }
+
+      // Second scan: Check-out
+      final existingCheckOut = existing.readNullable<int>('check_out_time');
+      final scanMs = timestamp.millisecondsSinceEpoch;
+      if (existingCheckOut == null && scanMs > existingCheckIn) {
+        if (scanMs - existingCheckIn > 2 * 60 * 1000) {
+          await customUpdate(
+            '''
+            UPDATE school_attendances
+            SET check_out_time = ?, updated_at = ?, is_synced = 0
+            WHERE id = ?
+            ''',
+            variables: [
+              Variable(scanMs),
+              Variable(now),
+              Variable(attendanceId),
+            ],
+          );
+        }
+      }
       return attendanceId;
     }
   }

@@ -214,17 +214,41 @@ class SchoolAttendanceProcessor {
   }
 
   Future<StudentWithEnrollment?> _resolveStudent(String rawId, String? mappedCode, int? numericId) async {
-    final candidates = <String>{rawId};
-    if (mappedCode != null) candidates.add(mappedCode);
+    final candidates = <String>{rawId, 'FP-$rawId'};
+    if (mappedCode != null) {
+      candidates.add(mappedCode);
+      candidates.add('FP-$mappedCode');
+    }
     if (numericId != null) {
       candidates.add('STU-$numericId');
       candidates.add('STU$numericId');
+      candidates.add('FP-$numericId');
       candidates.add('STU${numericId.toString().padLeft(4, '0')}');
+
       if (numericId >= 1000) {
+        // Flat offset candidates
         final offset = numericId >= 1001 ? (numericId - 1000) : numericId;
         final pad3 = offset.toString().padLeft(3, '0');
         candidates.add('STU$pad3');
         candidates.add('STU-$pad3');
+
+        // Class & Section-aware structured numeric candidates:
+        // Formula: [classLevel * 1000] + [sectionIndex * 100] + [roll]
+        // e.g. 3117 -> Class 3, Section A (1), Roll 17 -> C3A-017
+        final classLevel = numericId ~/ 1000;
+        final remainder = numericId % 1000;
+        final sectionIdx = remainder ~/ 100;
+        final roll = remainder % 100;
+
+        if (sectionIdx >= 1 && sectionIdx <= 26 && roll > 0) {
+          final letter = String.fromCharCode(64 + sectionIdx);
+          final padRoll = roll.toString().padLeft(3, '0');
+          candidates.add('C$classLevel$letter-$padRoll');
+          candidates.add('C$classLevel$letter$padRoll');
+          candidates.add('G$classLevel$letter-$padRoll');
+          candidates.add('STU-$classLevel$letter-$padRoll');
+          candidates.add('$roll');
+        }
       }
     }
 
