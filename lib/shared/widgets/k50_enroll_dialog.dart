@@ -248,7 +248,7 @@ class _K50EnrollDialogState extends ConsumerState<K50EnrollDialog> {
   void _simulateHardwareEnrollment() async {
     _countdownTimer?.cancel();
     _pollTimer?.cancel();
-    await _saveEnrollment('FP-${_numericDeviceUserId}-${DateTime.now().millisecondsSinceEpoch % 10000}');
+    await _saveEnrollment('FP-$_numericDeviceUserId-${DateTime.now().millisecondsSinceEpoch % 10000}');
   }
 
   @override

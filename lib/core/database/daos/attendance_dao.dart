@@ -368,7 +368,7 @@ class AttendanceDao extends DatabaseAccessor<AppDatabase> {
   }
 
   Future<List<AttendanceRecordView>> getRecentPunchStream({int limit = 20}) async {
-    final sql = '''
+    const sql = '''
       SELECT a.*,
              CASE 
                WHEN a.person_type = 'student' THEN s.name 

@@ -228,7 +228,7 @@ class StaffDao extends DatabaseAccessor<AppDatabase> {
     }
     if (photoPath != null) {
       updates.add('photo_path = ?');
-      variables.add(Variable(photoPath));
+      variables.add(Variable(photoPath.isEmpty ? null : photoPath));
     }
 
     variables.add(Variable(id));

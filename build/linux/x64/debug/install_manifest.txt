@@ -9,8 +9,8 @@
 /home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/bundle/data/flutter_assets/kernel_blob.bin
 /home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/bundle/data/flutter_assets/.env
 /home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/bundle/data/flutter_assets/fonts/MaterialIcons-Regular.otf
-/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/bundle/data/flutter_assets/shaders/stretch_effect.frag
 /home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/bundle/data/flutter_assets/shaders/ink_sparkle.frag
+/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/bundle/data/flutter_assets/shaders/stretch_effect.frag
 /home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/bundle/data/flutter_assets/NativeAssetsManifest.json
 /home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/bundle/data/flutter_assets/AssetManifest.bin
 /home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/bundle/data/flutter_assets/FontManifest.json

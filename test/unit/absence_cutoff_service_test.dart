@@ -79,11 +79,9 @@ void main() {
 
   group('AbsenceCutoffService Tests', () {
     test('evaluateCutoffAndNotify detects absent students and triggers alerts', () async {
-      final now = DateTime.now();
-      final tomorrow = now.add(const Duration(days: 1));
-
-      // Evaluate cutoff for tomorrow where no students have scanned yet
-      final result = await cutoffService.evaluateCutoffAndNotify(date: tomorrow);
+      // Use a known school working day (Monday 2026-10-12) where no students have scanned yet
+      final testDate = DateTime(2026, 10, 12);
+      final result = await cutoffService.evaluateCutoffAndNotify(date: testDate);
 
       expect(result.totalEnrolled, greaterThanOrEqualTo(16));
       expect(result.absencesDetected, equals(result.totalEnrolled));

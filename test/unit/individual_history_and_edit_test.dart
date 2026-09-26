@@ -176,11 +176,11 @@ void main() {
     });
 
     test('Validates numeric ranges: students (1001-7999) vs staff (8001-8999)', () {
-      final studentDbId = 15;
-      final staffDbId = 7;
+      const studentDbId = 15;
+      const staffDbId = 7;
 
-      final studentDeviceId = 1000 + studentDbId; // 1015
-      final staffDeviceId = 8000 + staffDbId;     // 8007
+      const studentDeviceId = 1000 + studentDbId; // 1015
+      const staffDeviceId = 8000 + staffDbId;     // 8007
 
       expect(studentDeviceId, inInclusiveRange(1001, 7999));
       expect(staffDeviceId, inInclusiveRange(8001, 8999));

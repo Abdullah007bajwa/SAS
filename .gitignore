@@ -1,0 +1,87 @@
+# =============================================================================
+# School Attendance Portal — gitignore
+# =============================================================================
+
+# --- Secrets & local config (NEVER commit) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials.json
+secrets.json
+
+# --- Flutter / Dart ---
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+**/doc/api/
+*.dart.js
+*.info.json
+*.js_
+*.js.deps
+*.js.map
+*.log
+
+# --- Python local venv ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# --- Windows / Linux builds ---
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+
+# --- IDE & editors ---
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.json
+*.swp
+*.swo
+*~
+.history/
+
+# --- .NET / K50 Bridge ---
+k50-bridge/**/bin/
+k50-bridge/**/obj/
+k50-bridge/**/.vs/
+k50-bridge/**/*.user
+k50-bridge/**/*.suo
+k50-bridge/publish/
+k50-bridge/dist/
+k50-bridge/K50Bridge/lib/Interop.zkemkeeper.dll
+
+# ZKTeco SDK binaries (bundle at build time only)
+k50-bridge/sdk/x86/*.dll
+
+# --- Output & Release artifacts ---
+/dist/
+*.zip
+*.msi
+*.exe
+!installer/*.iss
+!installer/*.ps1
+installer/output/
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Logs & temp ---
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.cache

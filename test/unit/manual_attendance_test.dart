@@ -21,7 +21,7 @@ void main() {
 
   group('Manual Attendance & Filter Queries Tests', () {
     test('Can record manual attendance for a student', () async {
-      final dateStr = '2026-10-15';
+      const dateStr = '2026-10-15';
       final student = (await db.studentsDao.getAllStudents()).first;
 
       final id = await db.attendanceDao.insertOrUpdateAttendance(

@@ -73,11 +73,11 @@ class K50StatusBadge extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.fingerprint, color: AppColors.primary),
-            const SizedBox(width: 8),
-            const Text('K50 Biometric Status'),
+            Icon(Icons.fingerprint, color: AppColors.primary),
+            SizedBox(width: 8),
+            Text('K50 Biometric Status'),
           ],
         ),
         content: SizedBox(
