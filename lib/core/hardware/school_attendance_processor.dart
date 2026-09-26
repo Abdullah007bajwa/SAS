@@ -86,8 +86,9 @@ class SchoolAttendanceProcessor {
 
     var changed = false;
 
-    // Load active settings for cutoff and ID ranges
+    // Load active settings for cutoff, closing and ID ranges
     final cutoffStr = await _db.settingsDao.getSetting('student_cutoff_time', defaultValue: '08:30');
+    final closingStr = await _db.settingsDao.getSetting('student_closing_time', defaultValue: '14:00');
     final studentRangeStart = int.tryParse(await _db.settingsDao.getSetting('student_id_range_start', defaultValue: '1001')) ?? 1001;
     final studentRangeEnd = int.tryParse(await _db.settingsDao.getSetting('student_id_range_end', defaultValue: '7999')) ?? 7999;
     final staffRangeStart = int.tryParse(await _db.settingsDao.getSetting('staff_id_range_start', defaultValue: '8001')) ?? 8001;
@@ -148,13 +149,17 @@ class SchoolAttendanceProcessor {
         final student = await _resolveStudent(rawId, mappedCode, numericId);
         if (student != null) {
           // Process Student check-in
-          final isLate = _isStudentLate(log.timestamp, cutoffStr);
-          final status = isLate ? 'late' : 'present';
+          // If scanned after closing time (e.g. 14:00), punch is recorded but status remains absent
+          final isPastClosing = _isPastTime(log.timestamp, closingStr);
+          final isLate = _isPastTime(log.timestamp, cutoffStr);
+          final status = isPastClosing ? 'absent' : (isLate ? 'late' : 'present');
+          final notes = isPastClosing ? 'Scanned past school closing time' : null;
 
           await _db.attendanceDao.recordStudentCheckIn(
             studentId: student.id,
             timestamp: log.timestamp,
             status: status,
+            notes: notes,
             method: 'fingerprint',
           );
 
@@ -259,9 +264,9 @@ class SchoolAttendanceProcessor {
     return null;
   }
 
-  bool _isStudentLate(DateTime scanTime, String cutoffStr) {
+  bool _isPastTime(DateTime scanTime, String timeStr) {
     try {
-      final parts = cutoffStr.split(':');
+      final parts = timeStr.split(':');
       if (parts.length >= 2) {
         final cutoffHour = int.parse(parts[0].trim());
         final cutoffMin = int.parse(parts[1].trim());

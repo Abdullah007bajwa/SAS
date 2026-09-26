@@ -18,6 +18,7 @@ class DemoSeeder {
     final defaultSettings = {
       'school_name': 'Springfield Academy — Biometric Attendance',
       'student_cutoff_time': '08:30',
+      'student_closing_time': '14:00',
       'attendance_grace_period': '15',
       'student_id_range_start': '1001',
       'student_id_range_end': '7999',

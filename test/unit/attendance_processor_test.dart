@@ -210,5 +210,47 @@ void main() {
       expect(record!.read<String>('status'), 'present');
       expect(record.read<int?>('check_in_time'), isNotNull);
     });
+
+    test('Student punch past school closing time records check_in_time but remains absent', () async {
+      final now = DateTime.now();
+      final dateStr = '${now.year.toString().padLeft(4, '0')}-'
+          '${now.month.toString().padLeft(2, '0')}-'
+          '${now.day.toString().padLeft(2, '0')}';
+
+      // Closing time is configured as 14:00
+      await db.settingsDao.setSetting('student_closing_time', '14:00');
+
+      final studentId = await db.studentsDao.insertStudent(
+        studentCode: 'C3A-018',
+        name: 'Evening Punch Student',
+        parentName: 'Parent',
+        parentPhone: '+923009999999',
+        fingerprintId: 'FP-3118',
+      );
+
+      // Student punches fingerprint at 19:30 (well past 14:00 closing)
+      final eveningTime = DateTime(now.year, now.month, now.day, 19, 30);
+      final log = LogEntry(
+        userId: '3118',
+        deviceUserId: '3118',
+        timestamp: eveningTime,
+        verifyType: 1,
+      );
+
+      await processor.applyLogs([log]);
+
+      final record = await db.attendanceDao.getStudentAttendanceToday(studentId, dateStr);
+      expect(record, isNotNull);
+      // Biometric punch IS recorded
+      expect(record!.read<int?>('check_in_time'), eveningTime.millisecondsSinceEpoch);
+      expect(record.read<String>('method'), 'fingerprint');
+      // Status remains absent
+      expect(record.read<String>('status'), 'absent');
+      expect(record.read<String?>('notes'), contains('closing'));
+
+      // Also verify it shows in recent punches stream because check_in_time is populated
+      final recent = await db.attendanceDao.getRecentPunchStream(limit: 5);
+      expect(recent.any((r) => r.personCode == 'C3A-018'), isTrue);
+    });
   });
 }

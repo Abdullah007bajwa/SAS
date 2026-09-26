@@ -20,6 +20,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _schoolNameCtrl = TextEditingController();
   final _cutoffTimeCtrl = TextEditingController();
+  final _closingTimeCtrl = TextEditingController();
   final _gracePeriodCtrl = TextEditingController();
   final _studentStartCtrl = TextEditingController();
   final _studentEndCtrl = TextEditingController();
@@ -46,6 +47,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     _schoolNameCtrl.text = s['school_name'] ?? 'School Attendance Portal';
     _cutoffTimeCtrl.text = s['student_cutoff_time'] ?? '08:30';
+    _closingTimeCtrl.text = s['student_closing_time'] ?? '14:00';
     _gracePeriodCtrl.text = s['attendance_grace_period'] ?? '15';
     _studentStartCtrl.text = s['student_id_range_start'] ?? '1001';
     _studentEndCtrl.text = s['student_id_range_end'] ?? '7999';
@@ -136,6 +138,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       Row(
                         children: [
                           Expanded(
+                            flex: 2,
                             child: TextField(
                               controller: _schoolNameCtrl,
                               decoration: const InputDecoration(labelText: 'School Name'),
@@ -146,8 +149,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             child: TextField(
                               controller: _cutoffTimeCtrl,
                               decoration: const InputDecoration(
-                                labelText: 'Student Cutoff Time (HH:mm)',
+                                labelText: 'Arrival Cutoff (HH:mm)',
                                 hintText: '08:30',
+                                helperText: 'After this is Late',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: TextField(
+                              controller: _closingTimeCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'School Closing (HH:mm)',
+                                hintText: '14:00',
+                                helperText: 'After this stays Absent',
                               ),
                             ),
                           ),
@@ -156,7 +171,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             child: TextField(
                               controller: _gracePeriodCtrl,
                               decoration: const InputDecoration(
-                                labelText: 'Teacher Grace Period (minutes)',
+                                labelText: 'Teacher Grace (min)',
                                 hintText: '15',
                               ),
                               keyboardType: TextInputType.number,
@@ -395,6 +410,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     await db.settingsDao.setSetting('school_name', _schoolNameCtrl.text.trim());
     await db.settingsDao.setSetting('student_cutoff_time', _cutoffTimeCtrl.text.trim());
+    await db.settingsDao.setSetting('student_closing_time', _closingTimeCtrl.text.trim());
     await db.settingsDao.setSetting('attendance_grace_period', _gracePeriodCtrl.text.trim());
     await db.settingsDao.setSetting('student_id_range_start', _studentStartCtrl.text.trim());
     await db.settingsDao.setSetting('student_id_range_end', _studentEndCtrl.text.trim());
