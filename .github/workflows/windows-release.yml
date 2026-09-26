@@ -1,0 +1,91 @@
+name: Build Windows Release (Single Installer EXE)
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build All-in-One Windows Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python Dependencies & PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller fastapi uvicorn pyzk requests
+
+      - name: Build Standalone K50 Bridge Executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "k50-bridge\dist\K50Bridge-Client"
+          pyinstaller --noconfirm --onedir --name K50Bridge --distpath "k50-bridge\dist\K50Bridge-Client" k50_bridge_server.py
+          if (Test-Path "k50-bridge\dist\K50Bridge-Client\K50Bridge\K50Bridge.exe") {
+            Copy-Item -Path "k50-bridge\dist\K50Bridge-Client\K50Bridge\*" -Destination "k50-bridge\dist\K50Bridge-Client\" -Recurse -Force
+          }
+          if (-not (Test-Path "k50-bridge\dist\K50Bridge-Client\K50Bridge.exe")) {
+            throw "K50Bridge.exe was not created."
+          }
+
+      - name: Flutter Dependencies
+        run: flutter pub get
+
+      - name: Run Tests
+        run: flutter test
+
+      - name: Build Flutter Windows Release
+        run: flutter build windows --release
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Compile Unified Setup Installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = "C:\Program Files\Inno Setup 6\ISCC.exe"
+          }
+          & $iscc installer\SchoolAttendance-Setup.iss
+          if (-not (Test-Path "dist\client\SchoolAttendance-Setup.exe")) {
+            throw "SchoolAttendance-Setup.exe compilation failed."
+          }
+
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SchoolAttendance-Setup-Windows
+          path: dist/client/SchoolAttendance-Setup.exe
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Latest Windows Release' }}
+          draft: false
+          prerelease: false
+          files: dist/client/SchoolAttendance-Setup.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
