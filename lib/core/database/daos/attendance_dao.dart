@@ -115,13 +115,12 @@ class AttendanceDao extends DatabaseAccessor<AppDatabase> {
       final existingCheckIn = existing.readNullable<int>('check_in_time');
       final attendanceId = existing.read<int>('id');
 
-      if (existingCheckIn == null) {
-        // Previously marked absent (e.g. by auto-cutoff or manual mark).
-        // Student arrived! Update record to check-in with proper status.
+      if (existingCheckIn == null || (status == 'absent' && existing.read<String>('status') == 'late')) {
+        // Previously marked absent, or correcting a scan that occurred past closing time
         await customUpdate(
           '''
           UPDATE school_attendances
-          SET check_in_time = ?, status = ?, method = ?, notes = ?, updated_at = ?, is_synced = 0
+          SET check_in_time = COALESCE(check_in_time, ?), status = ?, method = ?, notes = ?, updated_at = ?, is_synced = 0
           WHERE id = ?
           ''',
           variables: [
