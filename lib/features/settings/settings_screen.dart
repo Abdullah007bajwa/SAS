@@ -466,7 +466,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ),
                               ElevatedButton.icon(
                                 icon: const Icon(Icons.backup_outlined, size: 16),
-                                label: const Text('Backup Database Now'),
+                                label: const Text('Backup System Now (DB + Photos)'),
                                 onPressed: _createBackupNow,
                               ),
                             ],
@@ -488,7 +488,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             Expanded(
                               child: Text(
                                 'SQLite WAL (Write-Ahead Logging) is enabled for maximum crash resilience against power cuts and system freezes. '
-                                'Automated daily backups are saved locally to your Documents directory, with the last 14 snapshots kept.',
+                                'Complete backups (.zip bundling SQLite database + student/staff profile pictures) are saved locally to your Documents directory, with the last 14 snapshots kept.',
                                 style: TextStyle(fontSize: 12, color: Colors.blueGrey[800], height: 1.4),
                               ),
                             ),
@@ -518,7 +518,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 8),
                           child: Text(
-                            'No backup snapshots created yet. Click "Backup Database Now" to create your first snapshot.',
+                            'No backup snapshots created yet. Click "Backup System Now" to create your first snapshot.',
                             style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                           ),
                         )
@@ -540,7 +540,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ),
                               title: Text(b.fileName, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
                               subtitle: Text(
-                                '${b.formattedDate} • ${b.formattedSize}${b.isAutomatic ? " (Daily Auto)" : " (Manual)"}',
+                                '${b.formattedDate} • ${b.formattedSize}${b.isZip ? " • Full (DB + Photos)" : " • DB"}${b.isAutomatic ? " (Daily Auto)" : " (Manual)"}',
                                 style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                               ),
                               trailing: OutlinedButton.icon(
@@ -893,13 +893,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           children: [
             Icon(Icons.restore_page_outlined, color: AppColors.warning),
             SizedBox(width: 8),
-            Text('Restore Database from Backup?'),
+            Text('Restore System from Backup?'),
           ],
         ),
         content: SizedBox(
           width: 460,
           child: Text(
-            'Are you sure you want to restore the database from:\n${item.fileName} (${item.formattedSize}, created ${item.formattedDate})?\n\n'
+            'Are you sure you want to restore the system from:\n${item.fileName} (${item.formattedSize}, created ${item.formattedDate})?\n\n'
+            'This will restore your complete database and all student/staff profile pictures.\n\n'
             'An emergency safety backup of current data will be made automatically before restoring.',
             style: const TextStyle(fontSize: 14, height: 1.5),
           ),

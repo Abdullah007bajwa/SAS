@@ -1,5 +1,8 @@
+import 'dart:io';
+import 'package:archive/archive.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:school_attendance_portal/core/database/app_database.dart';
 import 'package:school_attendance_portal/core/database/database_backup_service.dart';
 import 'package:school_attendance_portal/core/database/demo_seeder.dart';
@@ -136,6 +139,68 @@ void main() {
       final backupService = DatabaseBackupService();
       final result = await backupService.checkIntegrity(db);
       expect(result, equals('ok'));
+    });
+
+    test('DatabaseBackupService creates full .zip archive with db and photos, and restores them', () async {
+      final tempDir = await Directory.systemTemp.createTemp('sas_backup_test_');
+      try {
+        final testBackupDir = Directory(p.join(tempDir.path, 'backups'))..createSync();
+        final testPhotosDir = Directory(p.join(tempDir.path, 'photos'))..createSync();
+        final testLiveDb = File(p.join(tempDir.path, 'school_attendance.sqlite'))..writeAsBytesSync([1, 2, 3, 4, 5]);
+
+        // Create sample photos
+        final photo1 = File(p.join(testPhotosDir.path, 'student_1001.jpg'))..writeAsStringSync('fake-jpeg-data');
+        final photo2 = File(p.join(testPhotosDir.path, 'staff_001.png'))..writeAsStringSync('fake-png-data');
+
+        final backupService = DatabaseBackupService();
+        final backupItem = await backupService.createBackup(
+          db,
+          tag: 'unit_test',
+          customBackupDir: testBackupDir,
+          customPhotosDir: testPhotosDir,
+          customLiveDb: testLiveDb,
+        );
+
+        expect(backupItem.isZip, isTrue);
+        expect(backupItem.photoCount, equals(2));
+        expect(File(backupItem.filePath).existsSync(), isTrue);
+
+        // Verify zip contents
+        final zipBytes = await File(backupItem.filePath).readAsBytes();
+        final archive = ZipDecoder().decodeBytes(zipBytes);
+        final fileNames = archive.map((e) => e.name).toSet();
+        expect(fileNames.contains('school_attendance.sqlite'), isTrue);
+        expect(fileNames.contains('photos/student_1001.jpg'), isTrue);
+        expect(fileNames.contains('photos/staff_001.png'), isTrue);
+        expect(fileNames.contains('backup_manifest.json'), isTrue);
+
+        // Delete photos and overwrite liveDb to test restore
+        await photo1.delete();
+        await photo2.delete();
+        await testLiveDb.writeAsBytes([9, 9, 9]);
+
+        expect(photo1.existsSync(), isFalse);
+        expect(photo2.existsSync(), isFalse);
+
+        // Restore
+        final restoreDir = Directory(p.join(tempDir.path, 'restored_photos'));
+        final restoredDbFile = File(p.join(tempDir.path, 'restored.sqlite'));
+
+        await backupService.restoreBackup(
+          db,
+          File(backupItem.filePath),
+          customLiveDb: restoredDbFile,
+          customPhotosDir: restoreDir,
+        );
+
+        expect(restoredDbFile.existsSync(), isTrue);
+        expect(File(p.join(restoreDir.path, 'student_1001.jpg')).existsSync(), isTrue);
+        expect(File(p.join(restoreDir.path, 'staff_001.png')).existsSync(), isTrue);
+      } finally {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      }
     });
   });
 }

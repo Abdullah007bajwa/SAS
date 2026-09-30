@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/desktop_file_picker.dart';
+import '../../core/utils/photo_storage_service.dart';
 
 /// Preset avatar metadata for schools.
 class AvatarPreset {
@@ -373,7 +374,21 @@ class _PhotoSelectorDialogState extends State<PhotoSelectorDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(context, _selectedPath ?? ''),
+          onPressed: () async {
+            final raw = _selectedPath ?? '';
+            if (raw.isNotEmpty && !raw.startsWith('avatar:')) {
+              final persisted = await PhotoStorageService.persistPhoto(
+                raw,
+                personType: widget.personType,
+                code: widget.personName,
+              );
+              if (context.mounted) {
+                Navigator.pop(context, persisted);
+              }
+            } else {
+              Navigator.pop(context, raw);
+            }
+          },
           child: const Text('Save Photo'),
         ),
       ],
