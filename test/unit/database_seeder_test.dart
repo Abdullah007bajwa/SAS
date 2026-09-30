@@ -95,21 +95,33 @@ void main() {
       expect(await db.settingsDao.getSetting('k50_ip'), equals('192.168.18.78'));
     });
 
-    test('clearDummyData purges all dummy students, classes, and logs while preserving admin', () async {
+    test('clearDummyData purges ONLY dummy students while strictly preserving real user students', () async {
       // First populate with full demo data
       await DemoSeeder.seed(db);
       expect(await db.studentsDao.countActiveStudents(), greaterThan(0));
-      expect(await db.classesDao.getAllClasses(), isNotEmpty);
 
-      // Purge dummy data
-      await DemoSeeder.clearDummyData(db, keepAdmin: true, keepSettings: true);
+      // Add a real user-created student (e.g. Abdullah Bajwa)
+      final userStudentId = await db.studentsDao.insertStudent(
+        studentCode: 'STD-9901',
+        name: 'Abdullah Bajwa',
+        gender: 'male',
+        dob: DateTime(2010, 5, 15).millisecondsSinceEpoch,
+        parentName: 'Mr. Bajwa',
+        parentPhone: '+923001234567',
+        whatsappPhone: '+923001234567',
+      );
 
-      // Verify all demo records wiped out
-      expect(await db.studentsDao.countActiveStudents(), equals(0));
-      expect(await db.classesDao.getAllClasses(), isEmpty);
-      expect(await db.sectionsDao.getAllSections(), isEmpty);
-      final todayPunches = await db.attendanceDao.queryAttendances(date: '2026-09-30');
-      expect(todayPunches, isEmpty);
+      expect(userStudentId, greaterThan(0));
+
+      // Purge ONLY dummy data
+      final deletedCount = await DemoSeeder.clearDummyData(db);
+      expect(deletedCount, equals(16)); // Exact 16 demo students purged
+
+      // Verify that user-created student Abdullah Bajwa STILL EXISTS!
+      final remainingStudents = await db.studentsDao.getAllStudents();
+      expect(remainingStudents.length, equals(1));
+      expect(remainingStudents.first.studentCode, equals('STD-9901'));
+      expect(remainingStudents.first.name, equals('Abdullah Bajwa'));
 
       // Verify admin account preserved
       final staff = await db.staffDao.getAllStaff();

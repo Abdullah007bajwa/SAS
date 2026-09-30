@@ -667,53 +667,104 @@ class DemoSeeder {
     }
   }
 
-  /// Removes all dummy/test students, staff, classes, sections, attendances, and logs.
-  /// Preserves the system administrator account and core school settings.
-  static Future<void> clearDummyData(
-    AppDatabase db, {
-    bool keepAdmin = true,
-    bool keepSettings = true,
-  }) async {
-    // 1. Delete notification delivery attempts & parent notification jobs
-    await db.customStatement('DELETE FROM notification_delivery_attempts;');
-    await db.customStatement('DELETE FROM parent_notification_jobs;');
 
-    // 2. Delete all attendance punch records
-    await db.customStatement('DELETE FROM school_attendances;');
+  static const demoStudentCodes = [
+    'STU-1001', 'STU-1002', 'STU-1003', 'STU-1004',
+    'STU-1005', 'STU-1006', 'STU-1007', 'STU-1008',
+    'STU-1009', 'STU-1010', 'STU-1011', 'STU-1012',
+    'STU-1013', 'STU-1014', 'STU-1015', 'STU-1016',
+  ];
 
-    // 3. Delete student enrollments and students
-    await db.customStatement('DELETE FROM student_enrollments;');
-    await db.customStatement('DELETE FROM students;');
+  static const demoStaffCodes = [
+    'ADM002', 'TCH001', 'TCH002', 'TCH003', 'TCH004', 'STF001', 'STF002',
+  ];
 
-    // 4. Delete sections and classes
-    await db.customStatement('DELETE FROM sections;');
-    await db.customStatement('DELETE FROM school_classes;');
+  /// Removes ONLY the dummy/sample students, dummy staff, and their sample attendance records.
+  /// ALL user-created students (like Abdullah, etc.), user-created staff, and real attendance punches are strictly PRESERVED.
+  static Future<int> clearDummyData(AppDatabase db) async {
+    final quotedCodes = demoStudentCodes.map((c) => "'$c'").join(',');
+    final quotedStaff = demoStaffCodes.map((c) => "'$c'").join(',');
 
-    // 5. Delete non-admin staff users
-    if (keepAdmin) {
-      await db.customStatement("DELETE FROM users WHERE role != 'admin';");
-      final admins = await db.staffDao.getAllStaff();
-      if (admins.isEmpty) {
-        await seedDefaultsOnly(db);
-      }
-    } else {
-      await db.customStatement('DELETE FROM users;');
-      await seedDefaultsOnly(db);
-    }
+    // 1. Delete notifications for demo students
+    await db.customStatement('''
+      DELETE FROM notification_delivery_attempts
+      WHERE job_id IN (
+        SELECT id FROM parent_notification_jobs
+        WHERE student_id IN (SELECT id FROM students WHERE student_code IN ($quotedCodes))
+      );
+    ''');
+    await db.customStatement('''
+      DELETE FROM parent_notification_jobs
+      WHERE student_id IN (SELECT id FROM students WHERE student_code IN ($quotedCodes));
+    ''');
 
-    // 6. Delete old activity logs
-    await db.customStatement('DELETE FROM activity_logs;');
+    // 2. Delete attendances for demo students and demo staff
+    await db.customStatement('''
+      DELETE FROM school_attendances
+      WHERE student_id IN (SELECT id FROM students WHERE student_code IN ($quotedCodes));
+    ''');
+    await db.customStatement('''
+      DELETE FROM school_attendances
+      WHERE staff_id IN (SELECT id FROM users WHERE employee_code IN ($quotedStaff));
+    ''');
 
-    if (!keepSettings) {
-      await db.customStatement('DELETE FROM school_settings;');
-      await seedDefaultsOnly(db);
-    }
+    // 3. Delete enrollments for demo students
+    await db.customStatement('''
+      DELETE FROM student_enrollments
+      WHERE student_id IN (SELECT id FROM students WHERE student_code IN ($quotedCodes));
+    ''');
+
+    // 4. Delete demo students
+    final deletedStudents = await db.customSelect(
+      'SELECT COUNT(*) AS c FROM students WHERE student_code IN ($quotedCodes);',
+    ).getSingle();
+    final studentCount = deletedStudents.read<int>('c');
+
+    await db.customStatement('DELETE FROM students WHERE student_code IN ($quotedCodes);');
+
+    // 5. Delete demo staff (keep admin ADM001 and all user-created staff)
+    await db.customStatement('DELETE FROM users WHERE employee_code IN ($quotedStaff);');
+
+    // 6. Delete sections and classes ONLY if empty (no remaining students)
+    await db.customStatement('''
+      DELETE FROM sections
+      WHERE id NOT IN (SELECT section_id FROM student_enrollments);
+    ''');
+    await db.customStatement('''
+      DELETE FROM school_classes
+      WHERE id NOT IN (SELECT class_id FROM student_enrollments);
+    ''');
+
+    // 7. Remove demo seeder activity logs
+    await db.customStatement('''
+      DELETE FROM activity_logs
+      WHERE action = 'seed_demo_data'
+         OR details LIKE '%Liam Walker%'
+         OR details LIKE '%Sarah Jenkins%'
+         OR details LIKE '%William Davis%';
+    ''');
 
     await db.activityDao.log(
       entityType: 'system',
       entityId: '0',
-      action: 'purge_dummy_data',
-      details: 'All dummy students, classes, attendance records, and logs were removed. Clean school state active.',
+      action: 'purge_demo_data',
+      details: 'Removed $studentCount demo students and sample staff. Real students and records preserved.',
     );
+
+    return studentCount;
+  }
+
+  /// Full factory reset: wipes everything and restores clean default admin & settings.
+  static Future<void> factoryReset(AppDatabase db) async {
+    await db.customStatement('DELETE FROM notification_delivery_attempts;');
+    await db.customStatement('DELETE FROM parent_notification_jobs;');
+    await db.customStatement('DELETE FROM school_attendances;');
+    await db.customStatement('DELETE FROM student_enrollments;');
+    await db.customStatement('DELETE FROM students;');
+    await db.customStatement('DELETE FROM sections;');
+    await db.customStatement('DELETE FROM school_classes;');
+    await db.customStatement('DELETE FROM users;');
+    await db.customStatement('DELETE FROM activity_logs;');
+    await seedDefaultsOnly(db);
   }
 }

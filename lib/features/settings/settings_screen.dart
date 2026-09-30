@@ -98,8 +98,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 16,
+                runSpacing: 16,
                 children: [
                   const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -430,10 +433,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 12,
+                        runSpacing: 12,
                         children: [
                           const Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.shield_outlined, color: AppColors.primary, size: 20),
                               SizedBox(width: 8),
@@ -445,6 +452,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           Wrap(
                             spacing: 8,
+                            runSpacing: 8,
                             children: [
                               OutlinedButton.icon(
                                 icon: const Icon(Icons.health_and_safety_outlined, size: 16),
