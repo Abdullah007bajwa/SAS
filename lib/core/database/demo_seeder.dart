@@ -24,7 +24,7 @@ class DemoSeeder {
       'student_id_range_end': '7999',
       'staff_id_range_start': '8001',
       'staff_id_range_end': '8999',
-      'k50_ip': '192.168.1.201',
+      'k50_ip': '192.168.18.78',
       'k50_port': '4370',
       'k50_bridge_port': '8787',
       'sms_enabled': 'true',

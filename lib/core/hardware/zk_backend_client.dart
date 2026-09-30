@@ -58,6 +58,7 @@ class BackendHealthResponse {
     this.deviceOnline = false,
     this.deviceState,
     this.ip,
+    this.port,
     this.error,
     this.queuePending,
     this.queueBusy,
@@ -69,6 +70,7 @@ class BackendHealthResponse {
       deviceOnline: json['ok'] == true,
       deviceState: json['deviceState'] as String?,
       ip: json['ip'] as String?,
+      port: json['port'] as int?,
       error: json['lastError'] as String? ?? json['error'] as String?,
       queuePending: json['queuePending'] as int?,
       queueBusy: json['queueBusy'] as bool?,
@@ -79,6 +81,7 @@ class BackendHealthResponse {
   final bool deviceOnline;
   final String? deviceState;
   final String? ip;
+  final int? port;
   final String? error;
   final int? queuePending;
   final bool? queueBusy;

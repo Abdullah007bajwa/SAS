@@ -39,6 +39,7 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64compatible
+SetupIconFile=app_icon.ico
 CloseApplications=no
 SetupLogging=yes
 RestartApplications=no
@@ -58,10 +59,13 @@ Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}\App"; Flags: ig
 ; K50 Bridge (published client folder)
 Source: "..\k50-bridge\dist\K50Bridge-Client\*"; DestDir: "{app}\K50Bridge"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "Install.exe"
 ; Post-install and helper scripts
+Source: "pre-install.ps1"; Flags: dontcopy
+Source: "school-process-control.ps1"; Flags: dontcopy
 Source: "post-install.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "school-process-control.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "repair-k50-com.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "register-k50-bridge-task.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
+Source: "start-k50-bridge.vbs"; DestDir: "{app}\K50Bridge"; Flags: ignoreversion
 Source: "start-k50-bridge.cmd"; DestDir: "{app}\K50Bridge"; Flags: ignoreversion
 Source: "start-all-k50-bridges.cmd"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -84,3 +88,20 @@ Filename: "{app}\App\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags
 [UninstallRun]
 Filename: "schtasks.exe"; Parameters: "/Delete /TN ""SchoolAttendance-K50Bridge"" /F"; RunOnceId: "RemoveBridgeTask"; Flags: runhidden skipifdoesntexist
 Filename: "schtasks.exe"; Parameters: "/Delete /TN ""SchoolAttendance-App"" /F"; RunOnceId: "RemoveAppTask"; Flags: runhidden skipifdoesntexist
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  { Stop school app and bridges before copying new files }
+  ExtractTemporaryFile('pre-install.ps1');
+  ExtractTemporaryFile('school-process-control.ps1');
+  if Exec('powershell.exe',
+    ExpandConstant('-NoProfile -ExecutionPolicy Bypass -File "{tmp}\pre-install.ps1"'),
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    Log('pre-install exit code: ' + IntToStr(ResultCode))
+  else
+    Log('pre-install failed to start');
+  Result := '';
+end;

@@ -3,7 +3,7 @@
 # =============================================================================
 
 # --- Secrets & local config (NEVER commit) ---
-.env
+
 .env.*
 !.env.example
 *.pem
@@ -85,3 +85,5 @@ tmp/
 temp/
 *.tmp
 *.cache
+IMG_*.jpg
+*.jpg

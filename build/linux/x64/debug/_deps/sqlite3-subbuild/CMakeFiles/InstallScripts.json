@@ -1,7 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/home/zozo/Desktop/Projects/SAS/school_attendance_portal/build/linux/x64/debug/_deps/sqlite3-subbuild/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

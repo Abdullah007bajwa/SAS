@@ -53,7 +53,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _studentEndCtrl.text = s['student_id_range_end'] ?? '7999';
     _staffStartCtrl.text = s['staff_id_range_start'] ?? '8001';
     _staffEndCtrl.text = s['staff_id_range_end'] ?? '8999';
-    _k50IpCtrl.text = s['k50_ip'] ?? '192.168.1.201';
+    _k50IpCtrl.text = s['k50_ip'] ?? '192.168.18.78';
     _k50PortCtrl.text = s['k50_port'] ?? '4370';
     _bridgePortCtrl.text = s['k50_bridge_port'] ?? '8787';
 
@@ -416,8 +416,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await db.settingsDao.setSetting('student_id_range_end', _studentEndCtrl.text.trim());
     await db.settingsDao.setSetting('staff_id_range_start', _staffStartCtrl.text.trim());
     await db.settingsDao.setSetting('staff_id_range_end', _staffEndCtrl.text.trim());
-    await db.settingsDao.setSetting('k50_ip', _k50IpCtrl.text.trim());
-    await db.settingsDao.setSetting('k50_port', _k50PortCtrl.text.trim());
+    
+    final targetIp = _k50IpCtrl.text.trim();
+    final targetPort = int.tryParse(_k50PortCtrl.text.trim()) ?? 4370;
+    await db.settingsDao.setSetting('k50_ip', targetIp);
+    await db.settingsDao.setSetting('k50_port', targetPort.toString());
     await db.settingsDao.setSetting('k50_bridge_port', _bridgePortCtrl.text.trim());
 
     await db.settingsDao.setSetting('sms_enabled', _smsEnabled ? 'true' : 'false');
@@ -433,9 +436,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     ref.invalidate(settingsMapProvider);
 
+    // Dynamically notify bridge server of new device IP & port
+    if (targetIp.isNotEmpty) {
+      final client = ref.read(zkBackendClientProvider);
+      client.connectDevice(targetIp, targetPort);
+    }
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Settings saved successfully!')),
+        const SnackBar(content: Text('Settings saved and device configuration updated!')),
       );
     }
   }
@@ -487,6 +496,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   void _testBridge() async {
     final client = ref.read(zkBackendClientProvider);
+    final targetIp = _k50IpCtrl.text.trim();
+    final targetPort = int.tryParse(_k50PortCtrl.text.trim()) ?? 4370;
+
+    // Proactively send configured IP to bridge
+    if (targetIp.isNotEmpty) {
+      await client.connectDevice(targetIp, targetPort);
+    }
+
     final res = await client.health();
 
     if (mounted) {
@@ -496,20 +513,54 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           title: Row(
             children: [
               Icon(
-                res.ok ? Icons.check_circle : Icons.error_outline,
-                color: res.ok ? AppColors.present : AppColors.error,
+                res.ok
+                    ? (res.deviceOnline ? Icons.check_circle : Icons.warning_amber_rounded)
+                    : Icons.error_outline,
+                color: res.ok
+                    ? (res.deviceOnline ? AppColors.present : AppColors.warning)
+                    : AppColors.error,
               ),
               const SizedBox(width: 8),
-              Text(res.ok ? 'Bridge Connected' : 'Bridge Offline'),
+              Text(
+                !res.ok
+                    ? 'Bridge Offline'
+                    : (res.deviceOnline ? 'K50 Terminal Connected' : 'Bridge Running (Device Offline)'),
+              ),
             ],
           ),
           content: SizedBox(
-            width: 440,
-            child: Text(
-              res.ok
-                  ? 'The C# K50 bridge is running and responsive on port ${_bridgePortCtrl.text}.\nDevice online: ${res.deviceOnline ? "Yes" : "No"}'
-                  : 'Could not connect to C# bridge: ${res.error ?? "Connection refused."}\n\nMake sure K50Bridge is running on Windows (or configured host).',
-              style: const TextStyle(fontSize: 14, height: 1.4),
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!res.ok)
+                  Text(
+                    'Could not connect to K50 bridge server on port ${_bridgePortCtrl.text}.\n\n'
+                    'Error: ${res.error ?? "Connection refused."}\n\n'
+                    'Make sure the bridge service is running.',
+                    style: const TextStyle(fontSize: 14, height: 1.4),
+                  )
+                else ...[
+                  Text(
+                    '• Bridge Server: RUNNING on port ${_bridgePortCtrl.text}\n'
+                    '• Target Device IP: ${res.ip ?? targetIp}:${res.port ?? targetPort}\n'
+                    '• Device Status: ${res.deviceOnline ? "ONLINE (Hardware Ready)" : "OFFLINE"}',
+                    style: const TextStyle(fontSize: 14, height: 1.5, fontWeight: FontWeight.w500),
+                  ),
+                  if (!res.deviceOnline) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Last Error: ${res.error ?? "Could not reach device"}\n\n'
+                      'Troubleshooting:\n'
+                      '1. Ensure device IP ($targetIp) is reachable (ping $targetIp)\n'
+                      '2. Check ethernet cable / network switch\n'
+                      '3. Verify port is set to 4370 in K50 device comm settings',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
+                    ),
+                  ],
+                ],
+              ],
             ),
           ),
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],

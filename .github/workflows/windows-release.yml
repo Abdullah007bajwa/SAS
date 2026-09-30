@@ -33,13 +33,13 @@ jobs:
       - name: Install Python Dependencies & PyInstaller
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller fastapi uvicorn pyzk requests
+          pip install pyinstaller -r requirements.txt
 
       - name: Build Standalone K50 Bridge Executable
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "k50-bridge\dist\K50Bridge-Client"
-          pyinstaller --noconfirm --onedir --name K50Bridge --distpath "k50-bridge\dist\K50Bridge-Client" k50_bridge_server.py
+          pyinstaller --noconfirm --onedir --noconsole --name K50Bridge --distpath "k50-bridge\dist\K50Bridge-Client" k50_bridge_server.py
           if (Test-Path "k50-bridge\dist\K50Bridge-Client\K50Bridge\K50Bridge.exe") {
             Copy-Item -Path "k50-bridge\dist\K50Bridge-Client\K50Bridge\*" -Destination "k50-bridge\dist\K50Bridge-Client\" -Recurse -Force
           }
