@@ -14,7 +14,11 @@ class K50BridgeLauncherService {
 
   bool _ensureInFlight = false;
 
-  Future<void> ensureRunning({required List<String> bridgeUrls}) async {
+  Future<void> ensureRunning({
+    required List<String> bridgeUrls,
+    String? deviceIp,
+    int? devicePort,
+  }) async {
     if (!Platform.isWindows || bridgeUrls.isEmpty) return;
     if (_ensureInFlight) return;
 
@@ -29,7 +33,7 @@ class K50BridgeLauncherService {
         bridgeUrls.map((url) => _waitForBridge(url, const Duration(seconds: 45))),
       );
 
-      await _connectDevices(bridgeUrls);
+      await _connectDevices(bridgeUrls, deviceIp: deviceIp, devicePort: devicePort);
     } finally {
       _ensureInFlight = false;
     }
@@ -90,15 +94,26 @@ class K50BridgeLauncherService {
     }
   }
 
-  Future<void> _connectDevices(List<String> urls) async {
+  Future<void> _connectDevices(
+    List<String> urls, {
+    String? deviceIp,
+    int? devicePort,
+  }) async {
     for (final url in urls) {
       if (!await _isBridgeProcessUp(url)) continue;
       try {
+        final payload = <String, dynamic>{};
+        if (deviceIp != null && deviceIp.isNotEmpty) {
+          payload['ip'] = deviceIp;
+        }
+        if (devicePort != null && devicePort > 0) {
+          payload['port'] = devicePort;
+        }
         await http
             .post(
               _connectUri(url),
               headers: {'Content-Type': 'application/json'},
-              body: '{}',
+              body: jsonEncode(payload),
             )
             .timeout(const Duration(seconds: 20));
       } catch (_) {}

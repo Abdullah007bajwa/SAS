@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/database/database_backup_service.dart';
 import '../../core/database/database_provider.dart';
 import '../../core/database/demo_seeder.dart';
 import '../../core/hardware/hardware_providers.dart';
@@ -40,6 +42,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _smsEnabled = false;
   bool _waEnabled = false;
   bool _initialized = false;
+
+  List<BackupItem> _backups = [];
+  bool _loadingBackups = false;
+  String? _integrityStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadBackups();
+    });
+  }
 
   void _populate(Map<String, String> s) {
     if (_initialized) return;
@@ -101,14 +115,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                     ],
                   ),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.absent,
+                          side: const BorderSide(color: AppColors.absent),
+                        ),
+                        icon: const Icon(Icons.delete_sweep_outlined, size: 16),
+                        label: const Text('Clear All Dummy Data'),
+                        onPressed: _clearDummyData,
+                      ),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.dataset_outlined, size: 16),
                         label: const Text('Seed Demo Data'),
                         onPressed: _seedDemoData,
                       ),
-                      const SizedBox(width: 12),
                       ElevatedButton.icon(
                         icon: const Icon(Icons.save, size: 16),
                         label: const Text('Save Configuration'),
@@ -397,6 +421,186 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
+
+              // Section 4: Local Database Crash Protection & Backups
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.shield_outlined, color: AppColors.primary, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'Local Database Backup & Crash Protection',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                              ),
+                            ],
+                          ),
+                          Wrap(
+                            spacing: 8,
+                            children: [
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.health_and_safety_outlined, size: 16),
+                                label: const Text('Verify Integrity'),
+                                onPressed: _checkIntegrity,
+                              ),
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.folder_open_outlined, size: 16),
+                                label: const Text('Open Backups Folder'),
+                                onPressed: _openBackupFolder,
+                              ),
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.backup_outlined, size: 16),
+                                label: const Text('Backup Database Now'),
+                                onPressed: _createBackupNow,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline, size: 18, color: AppColors.primary),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'SQLite WAL (Write-Ahead Logging) is enabled for maximum crash resilience against power cuts and system freezes. '
+                                'Automated daily backups are saved locally to your Documents directory, with the last 14 snapshots kept.',
+                                style: TextStyle(fontSize: 12, color: Colors.blueGrey[800], height: 1.4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_integrityStatus != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Last Integrity Check: $_integrityStatus',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _integrityStatus == 'ok' ? AppColors.present : AppColors.absent,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      const Text('Recent Backups', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      if (_loadingBackups)
+                        const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (_backups.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'No backup snapshots created yet. Click "Backup Database Now" to create your first snapshot.',
+                            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _backups.length > 5 ? 5 : _backups.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (ctx, i) {
+                            final b = _backups[i];
+                            return ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(
+                                b.isAutomatic ? Icons.schedule : Icons.save_alt,
+                                color: b.isAutomatic ? AppColors.primary : AppColors.present,
+                                size: 20,
+                              ),
+                              title: Text(b.fileName, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+                              subtitle: Text(
+                                '${b.formattedDate} • ${b.formattedSize}${b.isAutomatic ? " (Daily Auto)" : " (Manual)"}',
+                                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                              ),
+                              trailing: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                icon: const Icon(Icons.restore_page_outlined, size: 14),
+                                label: const Text('Restore', style: TextStyle(fontSize: 12)),
+                                onPressed: () => _restoreBackup(b),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Section 5: Data Management & Clean School Reset
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.cleaning_services_outlined, color: AppColors.absent, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Data Management & Reset to Clean School',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Purge all demo and test data (fake students, sample staff, dummy attendance records, logs). '
+                        'Your System Administrator credentials and School Configuration will be preserved so the school can start with clean rosters.',
+                        style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.absent,
+                              foregroundColor: Colors.white,
+                            ),
+                            icon: const Icon(Icons.delete_forever, size: 16),
+                            label: const Text('Wipe All Dummy / Test Data'),
+                            onPressed: _clearDummyData,
+                          ),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.dataset_outlined, size: 16),
+                            label: const Text('Load Demo School Data'),
+                            onPressed: _seedDemoData,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               const SizedBox(height: 32),
             ],
           ),
@@ -566,6 +770,208 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
         ),
       );
+    }
+  }
+
+  Future<void> _loadBackups() async {
+    if (!mounted) return;
+    setState(() => _loadingBackups = true);
+    try {
+      final backupService = ref.read(databaseBackupServiceProvider);
+      final list = await backupService.listBackups();
+      if (mounted) {
+        setState(() {
+          _backups = list;
+          _loadingBackups = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingBackups = false);
+    }
+  }
+
+  Future<void> _clearDummyData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.absent),
+            SizedBox(width: 8),
+            Text('Remove All Dummy / Test Data?'),
+          ],
+        ),
+        content: const SizedBox(
+          width: 480,
+          child: Text(
+            'This action will permanently delete all test/dummy students, enrollments, classes, sections, staff members, attendance logs, and notification records.\n\n'
+            'Your System Administrator account (admin@school.local) and School Settings will be preserved so you can register real students and staff immediately.\n\n'
+            'A safety backup of the database will be created before purging.',
+            style: TextStyle(fontSize: 14, height: 1.5),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.absent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Wipe All Dummy Data'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final db = ref.read(appDatabaseProvider);
+    final backupService = ref.read(databaseBackupServiceProvider);
+
+    // Create safety backup first
+    try {
+      await backupService.createBackup(db, tag: 'pre_purge');
+    } catch (_) {}
+
+    await DemoSeeder.clearDummyData(db);
+    await _loadBackups();
+    ref.invalidate(settingsMapProvider);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All dummy data successfully cleared! Clean school state active.'),
+          backgroundColor: AppColors.present,
+        ),
+      );
+    }
+  }
+
+  Future<void> _createBackupNow() async {
+    final db = ref.read(appDatabaseProvider);
+    final backupService = ref.read(databaseBackupServiceProvider);
+    try {
+      final item = await backupService.createBackup(db, tag: 'manual');
+      await _loadBackups();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Backup created: ${item.fileName} (${item.formattedSize})'),
+            backgroundColor: AppColors.present,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to create backup: $e'),
+            backgroundColor: AppColors.absent,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _restoreBackup(BackupItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.restore_page_outlined, color: AppColors.warning),
+            SizedBox(width: 8),
+            Text('Restore Database from Backup?'),
+          ],
+        ),
+        content: SizedBox(
+          width: 460,
+          child: Text(
+            'Are you sure you want to restore the database from:\n${item.fileName} (${item.formattedSize}, created ${item.formattedDate})?\n\n'
+            'An emergency safety backup of current data will be made automatically before restoring.',
+            style: const TextStyle(fontSize: 14, height: 1.5),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Proceed with Restore'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final db = ref.read(appDatabaseProvider);
+    final backupService = ref.read(databaseBackupServiceProvider);
+
+    try {
+      await backupService.restoreBackup(db, File(item.filePath));
+      await _loadBackups();
+      ref.invalidate(settingsMapProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Database successfully restored! Please restart the application if needed.'),
+            backgroundColor: AppColors.present,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Restore failed: $e'),
+            backgroundColor: AppColors.absent,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _checkIntegrity() async {
+    final db = ref.read(appDatabaseProvider);
+    final backupService = ref.read(databaseBackupServiceProvider);
+    final res = await backupService.checkIntegrity(db);
+    setState(() => _integrityStatus = res);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res == 'ok'
+              ? 'SQLite Database Integrity Check: PASSED (Database healthy)'
+              : 'SQLite Integrity Check Result: $res'),
+          backgroundColor: res == 'ok' ? AppColors.present : AppColors.absent,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openBackupFolder() async {
+    final backupService = ref.read(databaseBackupServiceProvider);
+    try {
+      await backupService.openBackupFolder();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open folder: $e'),
+            backgroundColor: AppColors.absent,
+          ),
+        );
+      }
     }
   }
 }

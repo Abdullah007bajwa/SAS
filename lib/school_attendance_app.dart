@@ -55,6 +55,10 @@ class _SchoolAttendanceAppState extends ConsumerState<SchoolAttendanceApp> {
 
     // 4. Start periodic cloud synchronization
     syncService.startPeriodicSync();
+
+    // 5. Automated crash protection daily database backup
+    final backupService = ref.read(databaseBackupServiceProvider);
+    backupService.autoDailyBackup(db);
   }
 
   @override

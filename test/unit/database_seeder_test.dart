@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:school_attendance_portal/core/database/app_database.dart';
+import 'package:school_attendance_portal/core/database/database_backup_service.dart';
 import 'package:school_attendance_portal/core/database/demo_seeder.dart';
 import '../test_helper.dart';
 
@@ -72,6 +73,57 @@ void main() {
       // Verify Settings
       final schoolName = await db.settingsDao.getSetting('school_name');
       expect(schoolName, contains('Springfield Academy'));
+    });
+
+    test('seedDefaultsOnly seeds only settings and single admin account', () async {
+      await DemoSeeder.seedDefaultsOnly(db);
+
+      // Verify no students, classes, or attendances exist
+      expect(await db.studentsDao.countActiveStudents(), equals(0));
+      expect(await db.classesDao.getAllClasses(), isEmpty);
+      expect(await db.sectionsDao.getAllSections(), isEmpty);
+      expect(await db.attendanceDao.queryAttendances(date: '2026-09-30'), isEmpty);
+
+      // Verify only 1 admin staff exists
+      final staff = await db.staffDao.getAllStaff();
+      expect(staff.length, equals(1));
+      expect(staff.first.role, equals('admin'));
+      expect(staff.first.email, equals('admin@school.local'));
+
+      // Verify essential settings exist
+      expect(await db.settingsDao.getSetting('student_cutoff_time'), equals('08:30'));
+      expect(await db.settingsDao.getSetting('k50_ip'), equals('192.168.18.78'));
+    });
+
+    test('clearDummyData purges all dummy students, classes, and logs while preserving admin', () async {
+      // First populate with full demo data
+      await DemoSeeder.seed(db);
+      expect(await db.studentsDao.countActiveStudents(), greaterThan(0));
+      expect(await db.classesDao.getAllClasses(), isNotEmpty);
+
+      // Purge dummy data
+      await DemoSeeder.clearDummyData(db, keepAdmin: true, keepSettings: true);
+
+      // Verify all demo records wiped out
+      expect(await db.studentsDao.countActiveStudents(), equals(0));
+      expect(await db.classesDao.getAllClasses(), isEmpty);
+      expect(await db.sectionsDao.getAllSections(), isEmpty);
+      final todayPunches = await db.attendanceDao.queryAttendances(date: '2026-09-30');
+      expect(todayPunches, isEmpty);
+
+      // Verify admin account preserved
+      final staff = await db.staffDao.getAllStaff();
+      expect(staff.length, equals(1));
+      expect(staff.first.role, equals('admin'));
+
+      // Verify settings preserved
+      expect(await db.settingsDao.getSetting('k50_ip'), isNotEmpty);
+    });
+
+    test('DatabaseBackupService checkIntegrity reports ok', () async {
+      final backupService = DatabaseBackupService();
+      final result = await backupService.checkIntegrity(db);
+      expect(result, equals('ok'));
     });
   });
 }

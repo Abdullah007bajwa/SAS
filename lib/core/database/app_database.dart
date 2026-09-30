@@ -50,7 +50,11 @@ class AppDatabase extends GeneratedDatabase {
           await _createTables();
         },
         beforeOpen: (details) async {
-          await customStatement('PRAGMA foreign_keys = ON');
+          await customStatement('PRAGMA foreign_keys = ON;');
+          try {
+            await customStatement('PRAGMA journal_mode = WAL;');
+            await customStatement('PRAGMA synchronous = NORMAL;');
+          } catch (_) {}
           await _createTables();
           try {
             await customStatement('ALTER TABLE students ADD COLUMN photo_path TEXT');
@@ -256,8 +260,13 @@ class AppDatabase extends GeneratedDatabase {
     await customStatement('CREATE INDEX IF NOT EXISTS idx_students_code ON students(student_code);');
   }
 
-  /// Seeds default admin, configuration settings, demo students, staff, and attendance.
-  Future<void> seedInitialData() async {
-    await DemoSeeder.seed(this);
+  /// Seeds configuration settings and primary admin account.
+  /// Set [demoData] to true only if sample students and attendances are explicitly requested.
+  Future<void> seedInitialData({bool demoData = false}) async {
+    if (demoData) {
+      await DemoSeeder.seed(this);
+    } else {
+      await DemoSeeder.seedDefaultsOnly(this);
+    }
   }
 }

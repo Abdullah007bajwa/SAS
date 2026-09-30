@@ -614,4 +614,106 @@ class DemoSeeder {
       details: 'Twilio SMS sent to +15551234005 for William Davis unexcused absence.',
     );
   }
+
+  /// Seeds only standard system settings and the primary administrator account.
+  /// Leaves students, classes, sections, and attendances completely clean for production.
+  static Future<void> seedDefaultsOnly(AppDatabase db) async {
+    final defaultSettings = {
+      'school_name': 'School Attendance Portal',
+      'student_cutoff_time': '08:30',
+      'student_closing_time': '14:00',
+      'attendance_grace_period': '15',
+      'student_id_range_start': '1001',
+      'student_id_range_end': '7999',
+      'staff_id_range_start': '8001',
+      'staff_id_range_end': '8999',
+      'k50_ip': '192.168.18.78',
+      'k50_port': '4370',
+      'k50_bridge_port': '8787',
+      'sms_enabled': 'true',
+      'whatsapp_enabled': 'true',
+      'twilio_account_sid': '',
+      'twilio_auth_token': '',
+      'twilio_from_phone': '',
+      'twilio_whatsapp_from': '',
+      'absence_sms_template':
+          'Dear Parent, your child {student_name} is marked ABSENT today ({date}). Please contact school office if this is an error.',
+      'absence_whatsapp_template':
+          'Dear Parent, your child {student_name} is marked ABSENT today ({date}). Please contact school office if you need assistance.',
+    };
+
+    for (final entry in defaultSettings.entries) {
+      final existing = await db.settingsDao.getSetting(entry.key);
+      if (existing.isEmpty) {
+        await db.settingsDao.setSetting(entry.key, entry.value);
+      }
+    }
+
+    final adminHash = sha256.convert(utf8.encode('admin123')).toString();
+
+    final existingAdmin = await db.staffDao.getStaffByEmployeeCode('ADM001');
+    if (existingAdmin == null) {
+      await db.staffDao.insertStaff(
+        name: 'System Administrator',
+        email: 'admin@school.local',
+        passwordHash: adminHash,
+        role: 'admin',
+        phone: '+15550000001',
+        staffCategory: 'administrator',
+        employeeCode: 'ADM001',
+        expectedStartTime: '08:00',
+        gracePeriodMinutes: 15,
+      );
+    }
+  }
+
+  /// Removes all dummy/test students, staff, classes, sections, attendances, and logs.
+  /// Preserves the system administrator account and core school settings.
+  static Future<void> clearDummyData(
+    AppDatabase db, {
+    bool keepAdmin = true,
+    bool keepSettings = true,
+  }) async {
+    // 1. Delete notification delivery attempts & parent notification jobs
+    await db.customStatement('DELETE FROM notification_delivery_attempts;');
+    await db.customStatement('DELETE FROM parent_notification_jobs;');
+
+    // 2. Delete all attendance punch records
+    await db.customStatement('DELETE FROM school_attendances;');
+
+    // 3. Delete student enrollments and students
+    await db.customStatement('DELETE FROM student_enrollments;');
+    await db.customStatement('DELETE FROM students;');
+
+    // 4. Delete sections and classes
+    await db.customStatement('DELETE FROM sections;');
+    await db.customStatement('DELETE FROM school_classes;');
+
+    // 5. Delete non-admin staff users
+    if (keepAdmin) {
+      await db.customStatement("DELETE FROM users WHERE role != 'admin';");
+      final admins = await db.staffDao.getAllStaff();
+      if (admins.isEmpty) {
+        await seedDefaultsOnly(db);
+      }
+    } else {
+      await db.customStatement('DELETE FROM users;');
+      await seedDefaultsOnly(db);
+    }
+
+    // 6. Delete old activity logs
+    await db.customStatement('DELETE FROM activity_logs;');
+
+    if (!keepSettings) {
+      await db.customStatement('DELETE FROM school_settings;');
+      await seedDefaultsOnly(db);
+    }
+
+    await db.activityDao.log(
+      entityType: 'system',
+      entityId: '0',
+      action: 'purge_dummy_data',
+      details: 'All dummy students, classes, attendance records, and logs were removed. Clean school state active.',
+    );
+  }
 }
