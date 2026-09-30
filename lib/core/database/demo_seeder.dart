@@ -725,15 +725,9 @@ class DemoSeeder {
     // 5. Delete demo staff (keep admin ADM001 and all user-created staff)
     await db.customStatement('DELETE FROM users WHERE employee_code IN ($quotedStaff);');
 
-    // 6. Delete sections and classes ONLY if empty (no remaining students)
-    await db.customStatement('''
-      DELETE FROM sections
-      WHERE id NOT IN (SELECT section_id FROM student_enrollments);
-    ''');
-    await db.customStatement('''
-      DELETE FROM school_classes
-      WHERE id NOT IN (SELECT class_id FROM student_enrollments);
-    ''');
+    // NOTE: NEVER delete school_classes or sections!
+    // School classes and sections (e.g. Class 10, Section B) are structural configurations
+    // set up by the school administrator. They must be preserved across dummy data purges.
 
     // 7. Remove demo seeder activity logs
     await db.customStatement('''

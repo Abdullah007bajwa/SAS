@@ -846,13 +846,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (_) {}
 
     await DemoSeeder.clearDummyData(db);
+    if (!mounted) return;
     await _loadBackups();
+    if (!mounted) return;
     ref.invalidate(settingsMapProvider);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('All dummy data successfully cleared! Clean school state active.'),
+          content: Text('All dummy students and demo staff cleared! Your classes, sections, and user records are preserved.'),
           backgroundColor: AppColors.present,
         ),
       );
@@ -864,6 +866,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final backupService = ref.read(databaseBackupServiceProvider);
     try {
       final item = await backupService.createBackup(db, tag: 'manual');
+      if (!mounted) return;
       await _loadBackups();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -929,7 +932,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     try {
       await backupService.restoreBackup(db, File(item.filePath));
+      if (!mounted) return;
       await _loadBackups();
+      if (!mounted) return;
       ref.invalidate(settingsMapProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

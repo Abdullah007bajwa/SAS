@@ -116,6 +116,19 @@ void main() {
 
       expect(userStudentId, greaterThan(0));
 
+      // Add user-created class (Class 10) and section (Section B) without any students
+      final class10Id = await db.classesDao.insertClass(
+        name: 'Class 10',
+        numericGrade: 10,
+        description: 'Tenth Grade Secondary User Created',
+      );
+      final sectionBId = await db.sectionsDao.insertSection(
+        classId: class10Id,
+        name: 'Section B',
+        roomNumber: '102-B',
+        capacity: 40,
+      );
+
       // Purge ONLY dummy data
       final deletedCount = await DemoSeeder.clearDummyData(db);
       expect(deletedCount, equals(16)); // Exact 16 demo students purged
@@ -125,6 +138,13 @@ void main() {
       expect(remainingStudents.length, equals(1));
       expect(remainingStudents.first.studentCode, equals('STD-9901'));
       expect(remainingStudents.first.name, equals('Abdullah Bajwa'));
+
+      // Verify user-created class 10 and section B are STILL PRESERVED!
+      final allClasses = await db.classesDao.getAllClasses();
+      expect(allClasses.any((c) => c.id == class10Id && c.name == 'Class 10'), isTrue);
+
+      final allSections = await db.sectionsDao.getAllSections();
+      expect(allSections.any((s) => s.id == sectionBId && s.name == 'Section B'), isTrue);
 
       // Verify admin account preserved
       final staff = await db.staffDao.getAllStaff();
