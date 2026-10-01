@@ -73,7 +73,20 @@ class K50BridgeLauncherService {
   }
 
   Future<void> _startInstalledBridges() async {
-    final root = installDir ?? defaultInstallDir;
+    String? root = installDir;
+    if (root == null) {
+      try {
+        final appDir = File(Platform.resolvedExecutable).parent;
+        // Typically {installDir}\App\school_attendance_portal.exe
+        final candidate = appDir.parent.path;
+        if (File('$candidate\\K50Bridge\\K50Bridge.exe').existsSync() ||
+            File('$candidate\\start-all-k50-bridges.cmd').existsSync()) {
+          root = candidate;
+        }
+      } catch (_) {}
+    }
+    root ??= defaultInstallDir;
+
     final allCmd = File('$root\\start-all-k50-bridges.cmd');
     if (allCmd.existsSync()) {
       await Process.start('cmd.exe', ['/c', allCmd.path], runInShell: false);

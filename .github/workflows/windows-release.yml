@@ -38,8 +38,21 @@ jobs:
       - name: Build Standalone K50 Bridge Executable
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "k50-bridge\dist\K50Bridge-Client"
-          pyinstaller --noconfirm --onedir --noconsole --name K50Bridge --distpath "k50-bridge\dist\K50Bridge-Client" k50_bridge_server.py
+          pyinstaller --noconfirm --onedir --noconsole --name K50Bridge `
+            --collect-all uvicorn `
+            --collect-all fastapi `
+            --collect-all pydantic `
+            --collect-all zk `
+            --hidden-import=uvicorn.logging `
+            --hidden-import=uvicorn.loops `
+            --hidden-import=uvicorn.loops.auto `
+            --hidden-import=uvicorn.protocols `
+            --hidden-import=uvicorn.protocols.http `
+            --hidden-import=uvicorn.protocols.http.auto `
+            --hidden-import=uvicorn.lifespan `
+            --hidden-import=uvicorn.lifespan.on `
+            --hidden-import=uvicorn.lifespan.off `
+            --distpath "k50-bridge\dist\K50Bridge-Client" k50_bridge_server.py
           if (Test-Path "k50-bridge\dist\K50Bridge-Client\K50Bridge\K50Bridge.exe") {
             Copy-Item -Path "k50-bridge\dist\K50Bridge-Client\K50Bridge\*" -Destination "k50-bridge\dist\K50Bridge-Client\" -Recurse -Force
           }

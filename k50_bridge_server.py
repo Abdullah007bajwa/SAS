@@ -8,18 +8,81 @@ import sys
 import threading
 import time
 from typing import Optional, List, Dict, Any
+
+# PyInstaller windowed / --noconsole fix: sys.stdout and sys.stderr are None on Windows.
+# Must redirect to devnull or file so writing to them doesn't raise NoneType/AttributeError.
+if getattr(sys, 'frozen', False):
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, 'w', encoding='utf-8')
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, 'w', encoding='utf-8')
+
+# Explicitly import uvicorn and its submodules so PyInstaller bundles all hooks
+import uvicorn
+import uvicorn.logging
+import uvicorn.loops
+import uvicorn.loops.auto
+import uvicorn.protocols
+import uvicorn.protocols.http
+import uvicorn.protocols.http.auto
+import uvicorn.lifespan
+import uvicorn.lifespan.on
+import uvicorn.lifespan.off
+
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from zk import ZK
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+# Determine directories
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Setup logging handlers: log to file in ProgramData (Windows) or BASE_DIR, and stdout if available
+log_handlers = []
+log_file_path = None
+if sys.platform == "win32":
+    prog_data = os.environ.get("PROGRAMDATA", r"C:\ProgramData")
+    candidate_log_dir = os.path.join(prog_data, "School Attendance Portal", "K50Bridge", "logs")
+    try:
+        os.makedirs(candidate_log_dir, exist_ok=True)
+        log_file_path = os.path.join(candidate_log_dir, "k50_bridge.log")
+    except Exception:
+        pass
+
+if not log_file_path:
+    log_file_path = os.path.join(BASE_DIR, "k50_bridge.log")
+
+try:
+    log_handlers.append(logging.FileHandler(log_file_path, encoding="utf-8"))
+except Exception:
+    pass
+
+if sys.stdout and hasattr(sys.stdout, 'write') and not getattr(sys.stdout, 'closed', False):
+    log_handlers.append(logging.StreamHandler(sys.stdout))
+
+if not log_handlers:
+    log_handlers.append(logging.NullHandler())
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=log_handlers,
+)
 logger = logging.getLogger("k50_bridge")
 
 app = FastAPI(title="K50 Hardware Bridge")
 
-# Paths for persistent configuration
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(BASE_DIR, "k50_config.json")
+# Paths for persistent configuration: support ProgramData on Windows or local directory
+PROGRAMDATA_DIR = os.path.join(
+    os.environ.get("PROGRAMDATA", r"C:\ProgramData"),
+    "School Attendance Portal",
+    "K50Bridge",
+) if sys.platform == "win32" else BASE_DIR
+
+CONFIG_FILE = os.path.join(PROGRAMDATA_DIR, "k50_config.json")
+FALLBACK_CONFIG_FILE = os.path.join(BASE_DIR, "k50_config.json")
 ENV_FILE = os.path.join(BASE_DIR, ".env")
 
 def _read_env_val(key: str) -> Optional[str]:
@@ -46,16 +109,17 @@ def load_config() -> tuple[str, int, int]:
     port = 4370
     bridge_port = 8787
 
-    # 1. Check persistent json config
-    if os.path.exists(CONFIG_FILE):
+    # 1. Check persistent json config (ProgramData then local fallback)
+    target_config = CONFIG_FILE if os.path.exists(CONFIG_FILE) else FALLBACK_CONFIG_FILE
+    if os.path.exists(target_config):
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(target_config, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 ip = data.get("ip") or ip
                 port = int(data.get("port") or port)
                 bridge_port = int(data.get("bridge_port") or bridge_port)
         except Exception as e:
-            logger.warning(f"Could not read config file {CONFIG_FILE}: {e}")
+            logger.warning(f"Could not read config file {target_config}: {e}")
 
     # 2. Check .env / env vars (overrides file if present)
     env_ip = _read_env_val("K50_IP") or _read_env_val("DEVICE_IP")
@@ -77,13 +141,20 @@ def load_config() -> tuple[str, int, int]:
     return ip, port, bridge_port
 
 def save_config(ip: str, port: int):
-    try:
-        data = {"ip": ip, "port": port}
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        logger.info(f"Saved device configuration to {CONFIG_FILE}: {data}")
-    except Exception as e:
-        logger.error(f"Failed to save config to {CONFIG_FILE}: {e}")
+    data = {"ip": ip, "port": port}
+    saved = False
+    for path in (CONFIG_FILE, FALLBACK_CONFIG_FILE):
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            logger.info(f"Saved device configuration to {path}: {data}")
+            saved = True
+            break
+        except Exception as e:
+            logger.warning(f"Could not save config to {path}: {e}")
+    if not saved:
+        logger.error(f"Failed to save device configuration to any path")
 
 # Global configuration state
 K50_IP, K50_PORT, BRIDGE_PORT = load_config()
@@ -419,7 +490,8 @@ def delete_user(req: UserRequest):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-if __name__ == "__main__":
+def main():
+    global K50_IP, K50_PORT, BRIDGE_PORT
     parser = argparse.ArgumentParser(description="K50 Hardware Bridge Server")
     parser.add_argument("--ip", type=str, default=None, help="K50 Terminal IP address")
     parser.add_argument("--port", type=int, default=None, help="K50 Terminal UDP/TCP port (default 4370)")
@@ -439,5 +511,33 @@ if __name__ == "__main__":
     # Try initial connection in background so server starts immediately
     threading.Thread(target=get_zk_connection, daemon=True).start()
 
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=BRIDGE_PORT, log_level="info")
+    # Pass log_config=None to prevent uvicorn from executing dictConfig.
+    # In PyInstaller windowed/noconsole binaries, dictConfig crashes with:
+    # ValueError: Unable to configure formatter 'default'
+    uvicorn.run(
+        app,
+        host="127.0.0.1",
+        port=BRIDGE_PORT,
+        log_config=None,
+        access_log=False,
+    )
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as exc:
+        import traceback
+        err_msg = traceback.format_exc()
+        try:
+            logger.critical(f"FATAL BRIDGE ERROR: {err_msg}")
+        except Exception:
+            pass
+        # Always write fatal error to crash log in ProgramData or local dir
+        try:
+            crash_dir = PROGRAMDATA_DIR if "PROGRAMDATA_DIR" in globals() else BASE_DIR
+            os.makedirs(crash_dir, exist_ok=True)
+            with open(os.path.join(crash_dir, "crash.log"), "a", encoding="utf-8") as f:
+                f.write(f"\n[{datetime.datetime.now().isoformat()}] FATAL CRASH:\n{err_msg}\n")
+        except Exception:
+            pass
+        sys.exit(1)
