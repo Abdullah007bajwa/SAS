@@ -54,8 +54,17 @@ class AndroidGatewayNotificationProvider implements NotificationProvider {
       );
     }
 
-    // Clean phone number: preserve leading + or convert standard format
-    final cleanPhone = to.trim().replaceAll(RegExp(r'[\s\-()]'), '');
+    // Clean phone number: normalize local Pakistani and international E.164 formats
+    var cleanPhone = to.trim().replaceAll(RegExp(r'[\s\-()]'), '');
+    if (cleanPhone.startsWith('00')) {
+      cleanPhone = '+${cleanPhone.substring(2)}';
+    } else if (cleanPhone.startsWith('03') && cleanPhone.length == 11) {
+      cleanPhone = '+92${cleanPhone.substring(1)}';
+    } else if (cleanPhone.startsWith('3') && cleanPhone.length == 10) {
+      cleanPhone = '+92$cleanPhone';
+    } else if (cleanPhone.startsWith('92') && cleanPhone.length == 12) {
+      cleanPhone = '+$cleanPhone';
+    }
 
     // Dual-compatible payload: works with Capcom6, Textbee, and generic SMS apps
     final payload = jsonEncode({

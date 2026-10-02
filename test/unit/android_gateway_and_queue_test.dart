@@ -70,7 +70,7 @@ void main() {
       expect(mockHttp.lastRequest?.headers['authorization'], startsWith('Basic '));
 
       final decoded = jsonDecode(mockHttp.lastRequestBody!) as Map<String, dynamic>;
-      expect(decoded['phoneNumbers'], contains('03001234567'));
+      expect(decoded['phoneNumbers'], contains('+923001234567'));
       expect(decoded['message'], 'Hello Student Arrived');
     });
 

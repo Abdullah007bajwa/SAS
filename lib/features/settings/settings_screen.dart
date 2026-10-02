@@ -112,9 +112,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _checkinSmsEnabled = s['sms_checkin_enabled'] != 'false';
     _waEnabled = s['whatsapp_enabled'] == 'true';
 
-    _androidGatewayUrlCtrl.text = s['sms_gateway_url'] ?? 'http://192.168.18.50:8080';
-    _androidGatewayUserCtrl.text = s['sms_gateway_username'] ?? '';
-    _androidGatewayPassCtrl.text = s['sms_gateway_password'] ?? '';
+    _androidGatewayUrlCtrl.text = s['sms_gateway_url'] ?? 'http://192.168.18.132:8080';
+    _androidGatewayUserCtrl.text = s['sms_gateway_username'] ?? 'sms';
+    _androidGatewayPassCtrl.text = s['sms_gateway_password'] ?? 'cWPHrhs5';
     _smsThrottleSecCtrl.text = s['sms_throttle_delay_sec'] ?? '2.5';
     _checkinSmsTemplateCtrl.text = s['checkin_sms_template'] ??
         'Dear Parent, your child {student_name} arrived at school at {time} on {date}. Status: {status}. - {school_name}';
