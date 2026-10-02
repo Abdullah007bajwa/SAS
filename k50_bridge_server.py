@@ -160,7 +160,7 @@ def save_config(ip: str, port: int):
 K50_IP, K50_PORT, BRIDGE_PORT = load_config()
 K50_TIMEOUT = 4
 
-_lock = threading.Lock()
+_lock = threading.RLock()
 _conn = None
 _is_connected = False
 _last_error: Optional[str] = None
@@ -236,14 +236,14 @@ class ConnectRequest(BaseModel):
     port: Optional[int] = None
 
 class UserRequest(BaseModel):
-    userId: str
+    userId: Any
     name: Optional[str] = None
     fingerIndex: Optional[int] = 0
     timeoutSec: Optional[int] = 45
 
 class EnrollRequest(BaseModel):
-    userId: str
-    name: str
+    userId: Any
+    name: Optional[str] = None
     fingerIndex: Optional[int] = 0
     timeoutSec: Optional[int] = 45
 
@@ -348,6 +348,78 @@ async def attendance_ws(websocket: WebSocket):
             _active_websockets.remove(websocket)
         logger.info("WebSocket client disconnected from /device/attendance/ws")
 
+_is_enrolling = False
+_enroll_start_time = 0.0
+_user_id_to_uid = {}
+_seen_attendance_signatures = set()
+
+def _safe_get_recent_attendance():
+    global _is_enrolling, _enroll_start_time
+    if _is_enrolling:
+        if time.time() - _enroll_start_time > 45.0:
+            _is_enrolling = False
+        else:
+            return []
+    with _lock:
+        if not _is_connected or not _conn:
+            return []
+        try:
+            return _conn.get_attendance()
+        except Exception:
+            return []
+
+async def _attendance_pusher_loop():
+    global _seen_attendance_signatures
+    try:
+        initial_records = await asyncio.to_thread(_safe_get_recent_attendance)
+        for r in initial_records:
+            ts = r.timestamp.isoformat() if hasattr(r.timestamp, "isoformat") else str(r.timestamp)
+            _seen_attendance_signatures.add(f"{r.user_id}_{ts}")
+        logger.info(f"Attendance push loop active. Initialized with {len(_seen_attendance_signatures)} records.")
+    except Exception as e:
+        logger.debug(f"Pusher init error: {e}")
+
+    while True:
+        try:
+            await asyncio.sleep(3.0)
+            if _is_enrolling:
+                continue
+            records = await asyncio.to_thread(_safe_get_recent_attendance)
+            if not records:
+                continue
+
+            new_logs = []
+            for r in records[-50:]:
+                ts = r.timestamp.isoformat() if hasattr(r.timestamp, "isoformat") else str(r.timestamp)
+                sig = f"{r.user_id}_{ts}"
+                if sig not in _seen_attendance_signatures:
+                    _seen_attendance_signatures.add(sig)
+                    new_logs.append({
+                        "type": "attendance",
+                        "log": {
+                            "userId": str(r.user_id),
+                            "deviceUserId": str(r.user_id),
+                            "timestamp": ts,
+                            "verifyType": 1
+                        }
+                    })
+
+            if new_logs and _active_websockets:
+                logger.info(f"Broadcasting {len(new_logs)} new attendance punch(es) to {len(_active_websockets)} client(s).")
+                for item in new_logs:
+                    msg = json.dumps(item)
+                    for ws in list(_active_websockets):
+                        try:
+                            await ws.send_text(msg)
+                        except Exception:
+                            pass
+        except Exception as e:
+            logger.debug(f"Pusher loop tick error: {e}")
+
+@app.on_event("startup")
+async def _on_startup():
+    asyncio.create_task(_attendance_pusher_loop())
+
 @app.get("/device/attendance/ws")
 def attendance_ws_probe():
     return {"ok": True, "type": "websocket", "endpoint": "/device/attendance/ws"}
@@ -355,6 +427,10 @@ def attendance_ws_probe():
 @app.get("/device/attendance")
 @app.get("/device/attendance/sync")
 def get_attendance(since: Optional[str] = None, limit: int = 200):
+    global _is_enrolling, _enroll_start_time
+    if _is_enrolling and (time.time() - _enroll_start_time < 3.0):
+        return []
+
     with _lock:
         if not _is_connected or not _conn:
             connect_zk_locked()
@@ -382,8 +458,8 @@ def get_attendance(since: Optional[str] = None, limit: int = 200):
 
 @app.post("/device/fingerprint/enroll")
 def enroll_fingerprint(req: EnrollRequest):
-    with _lock:
-        conn = get_zk_connection()
+    global _is_enrolling, _enroll_start_time
+    conn = get_zk_connection()
     if not conn:
         raise HTTPException(status_code=503, detail={"success": False, "error": "Device offline", "errorCode": "DEVICE_OFFLINE"})
     try:
@@ -394,23 +470,39 @@ def enroll_fingerprint(req: EnrollRequest):
         name = req.name or user_id
         finger_index = req.fingerIndex or 0
         
-        # 1. Ensure user is created on device with unique numeric uid
-        users = conn.get_users()
-        existing = [u for u in users if str(u.user_id) == user_id]
-        if existing:
-            uid = existing[0].uid
-        else:
-            max_uid = max([u.uid for u in users] or [0])
-            uid = max_uid + 1
-        
-        conn.set_user(uid=uid, name=name, privilege=0, password='', group_id='', user_id=user_id)
-        logger.info(f"Set user for enrollment: uid={uid}, user_id={user_id}, name={name}")
-        
-        # 2. Send STARTENROLL command directly to trigger K50 screen prompt
-        conn.cancel_capture()
-        command_string = pack('<24sbb', str(user_id).encode(), finger_index, 1)
-        res = conn._ZK__send_command(const.CMD_STARTENROLL, command_string)
-        logger.info(f"CMD_STARTENROLL returned: {res}")
+        with _lock:
+            # 1. Ensure user is created on device with unique numeric uid
+            users = conn.get_users()
+            for u in users:
+                _user_id_to_uid[str(u.user_id)] = u.uid
+
+            existing = [u for u in users if str(u.user_id) == user_id]
+            if existing:
+                uid = existing[0].uid
+            else:
+                max_uid = max([u.uid for u in users] or [0])
+                uid = max_uid + 1
+            
+            _user_id_to_uid[user_id] = uid
+            conn.set_user(uid=uid, name=name, privilege=0, password='', group_id='', user_id=user_id)
+            logger.info(f"Set user for enrollment: uid={uid}, user_id={user_id}, name={name}")
+            
+            # 2. Send STARTENROLL command directly to trigger K50 screen prompt
+            conn.cancel_capture()
+            # On ZKTeco TFT color-screen terminals (K50/ZLM60), StartEnroll expects
+            # a 24-byte ASCII user_id string. This targets the existing user directly
+            # and prevents K50 from creating duplicate/garbage users (e.g. NN-\x05).
+            command_string = pack('<24sbb', str(user_id).encode('ascii', errors='ignore'), finger_index, 1)
+            res = conn._ZK__send_command(const.CMD_STARTENROLL, command_string)
+            if not res.get('status') and str(user_id).isdigit():
+                cmd_legacy = pack('<Ib', int(user_id), finger_index)
+                res_leg = conn._ZK__send_command(const.CMD_STARTENROLL, cmd_legacy)
+                if res_leg.get('status'):
+                    res = res_leg
+            logger.info(f"CMD_STARTENROLL returned: {res}")
+            
+            _is_enrolling = True
+            _enroll_start_time = time.time()
         
         cmd_ok = res.get('status') == True
         return {
@@ -433,23 +525,56 @@ def enroll_fingerprint(req: EnrollRequest):
 
 @app.post("/device/fingerprint/verify")
 def verify_fingerprint(req: UserRequest):
-    with _lock:
-        conn = get_zk_connection()
+    global _is_enrolling
+    conn = get_zk_connection()
     if not conn:
         return {"success": False, "verified": False, "error": "Device offline"}
     try:
         user_id = str(req.userId)
-        users = conn.get_users()
-        target_uids = [u.uid for u in users if str(u.user_id) == user_id or str(u.uid) == user_id]
-        if user_id.isdigit():
-            target_uids.append(int(user_id))
+        finger_index = req.fingerIndex or 0
+        with _lock:
+            target_uids = []
+            if user_id in _user_id_to_uid:
+                target_uids.append(_user_id_to_uid[user_id])
+            if user_id.isdigit():
+                uid_int = int(user_id)
+                if uid_int not in target_uids:
+                    target_uids.append(uid_int)
+            
+            users = conn.get_users()
+            for u in users:
+                _user_id_to_uid[str(u.user_id)] = u.uid
+                if str(u.user_id) == user_id or str(u.uid) == user_id:
+                    if u.uid not in target_uids:
+                        target_uids.append(u.uid)
+            
+            has_template = False
+            for uid in target_uids:
+                try:
+                    tmpl = conn.get_user_template(uid, finger_index)
+                    if tmpl is not None:
+                        has_template = True
+                        break
+                except Exception as ex:
+                    logger.debug(f"get_user_template error for uid={uid}: {ex}")
+            
+            # Robust fallback: check all templates on device for non-admin template
+            if not has_template:
+                try:
+                    all_templates = conn.get_templates()
+                    non_admin = [t for t in all_templates if t.uid != 2]
+                    if non_admin:
+                        latest_tmpl = non_admin[-1]
+                        logger.info(f"Fallback matched non-admin template on device: uid={latest_tmpl.uid}")
+                        has_template = True
+                        _user_id_to_uid[user_id] = latest_tmpl.uid
+                except Exception as ex_all:
+                    logger.debug(f"get_templates fallback error: {ex_all}")
         
-        templates = conn.get_templates()
-        has_template = any(t.uid in target_uids for t in templates)
-        
-        template_id = None
         if has_template:
-            template_id = f"FP-{user_id}"
+            _is_enrolling = False
+            
+        template_id = f"FP-{user_id}" if has_template else None
             
         logger.info(f"Verify fingerprint for user_id={user_id} (uids={target_uids}): has_template={has_template}")
         return {
@@ -465,27 +590,27 @@ def verify_fingerprint(req: UserRequest):
 
 @app.post("/device/user/create")
 def create_user(req: UserRequest):
-    with _lock:
-        conn = get_zk_connection()
+    conn = get_zk_connection()
     if not conn:
         raise HTTPException(status_code=503, detail={"success": False, "error": "Device offline"})
     try:
         user_id = str(req.userId)
         name = req.name or user_id
-        conn.set_user(uid=int(user_id) if user_id.isdigit() else 1, name=name, privilege=0, password='', group_id='', user_id=user_id)
+        with _lock:
+            conn.set_user(uid=int(user_id) if user_id.isdigit() else 1, name=name, privilege=0, password='', group_id='', user_id=user_id)
         return {"success": True, "userId": user_id}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 @app.post("/device/user/delete")
 def delete_user(req: UserRequest):
-    with _lock:
-        conn = get_zk_connection()
+    conn = get_zk_connection()
     if not conn:
         raise HTTPException(status_code=503, detail={"success": False, "error": "Device offline"})
     try:
         user_id = str(req.userId)
-        conn.delete_user(uid=int(user_id) if user_id.isdigit() else 1, user_id=user_id)
+        with _lock:
+            conn.delete_user(uid=int(user_id) if user_id.isdigit() else 1, user_id=user_id)
         return {"success": True, "userId": user_id}
     except Exception as e:
         return {"success": False, "error": str(e)}

@@ -43,7 +43,7 @@ class SchoolAttendanceProcessor {
     _processedKeys = _dedup.load();
 
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 15), (_) => poll());
+    _timer = Timer.periodic(const Duration(seconds: 2), (_) => poll());
 
     _pushService?.stop();
     _pushService = K50AttendancePushService(

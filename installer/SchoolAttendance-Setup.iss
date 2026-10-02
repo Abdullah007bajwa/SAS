@@ -72,6 +72,8 @@ Source: "start-all-k50-bridges.cmd"; DestDir: "{app}"; Flags: ignoreversion
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\App\{#MyAppExeName}"; WorkingDir: "{app}\App"; Comment: "School Attendance Portal"
 Name: "{group}\K50 Bridge Settings"; Filename: "notepad.exe"; Parameters: """{app}\K50Bridge\appsettings.json"""; Comment: "K50 Scanner IP (port 8787)"
+Name: "{group}\View K50 Bridge Logs"; Filename: "notepad.exe"; Parameters: """{commonappdata}\School Attendance Portal\K50Bridge\logs\k50_bridge.log"""; Comment: "View K50 hardware bridge logs"
+Name: "{group}\K50 Bridge Settings"; Filename: "notepad.exe"; Parameters: """{commonappdata}\School Attendance Portal\K50Bridge\k50_config.json"""; Comment: "K50 Scanner IP & Port (port 8787)"
 Name: "{group}\Repair K50 Fingerprint"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\repair-k50-com.ps1"" -InstallDir ""{app}"""; Comment: "Fix fingerprint COM registration"; WorkingDir: "{app}\installer"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\App\{#MyAppExeName}"; WorkingDir: "{app}\App"; Tasks: desktopicon
 Name: "{commonstartup}\{#MyAppName}"; Filename: "{app}\App\{#MyAppExeName}"; WorkingDir: "{app}\App"; Tasks: autostart

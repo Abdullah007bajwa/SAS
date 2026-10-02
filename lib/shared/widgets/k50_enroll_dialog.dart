@@ -142,7 +142,7 @@ class _K50EnrollDialogState extends ConsumerState<K50EnrollDialog> {
       _phase = EnrollPhase.commandSent;
       _statusMessage = 'Sending enroll command to K50 for Numeric ID $deviceId...';
       _errorMessage = null;
-      _secondsRemaining = 35;
+      _secondsRemaining = 50;
     });
 
     final client = ref.read(zkBackendClientProvider);
@@ -198,7 +198,7 @@ class _K50EnrollDialogState extends ConsumerState<K50EnrollDialog> {
         }
       });
 
-      _pollTimer = Timer.periodic(const Duration(milliseconds: 1500), (t) async {
+      _pollTimer = Timer.periodic(const Duration(milliseconds: 2500), (t) async {
         if (!mounted || _phase != EnrollPhase.waitingFinger) {
           t.cancel();
           return;
@@ -425,7 +425,7 @@ class _K50EnrollDialogState extends ConsumerState<K50EnrollDialog> {
           ),
           FilledButton.icon(
             icon: const Icon(Icons.check_circle_outline, size: 16),
-            label: const Text('Check Verification'),
+            label: const Text('Confirm / Verify Scan'),
             onPressed: _checkVerificationNow,
           ),
           Tooltip(

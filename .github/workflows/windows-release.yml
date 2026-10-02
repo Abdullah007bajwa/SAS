@@ -43,6 +43,8 @@ jobs:
             --collect-all fastapi `
             --collect-all pydantic `
             --collect-all zk `
+            --collect-all websockets `
+            --hidden-import=websockets `
             --hidden-import=uvicorn.logging `
             --hidden-import=uvicorn.loops `
             --hidden-import=uvicorn.loops.auto `
