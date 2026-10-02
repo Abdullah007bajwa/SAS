@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
 import '../database/app_database.dart';
 import '../database/daos/students_dao.dart';
 import '../database/daos/staff_dao.dart';
+import '../notifications/sms_queue_dispatcher.dart';
 import 'k50_attendance_push_service.dart';
 import 'k50_device_user_map.dart';
 import 'zk_attendance_dedup.dart';
@@ -35,9 +37,14 @@ class SchoolAttendanceProcessor {
 
   Timer? _timer;
   K50AttendancePushService? _pushService;
+  SmsQueueDispatcher? _smsDispatcher;
   Set<String> _processedKeys;
 
   bool _isProcessing = false;
+
+  void setSmsDispatcher(SmsQueueDispatcher dispatcher) {
+    _smsDispatcher = dispatcher;
+  }
 
   void start(String bridgeBaseUrl) {
     _processedKeys = _dedup.load();
@@ -162,6 +169,41 @@ class SchoolAttendanceProcessor {
             notes: notes,
             method: 'fingerprint',
           );
+
+          // Automated real-time parent check-in SMS alert
+          try {
+            final globalSms = await _db.settingsDao.getSetting('sms_enabled', defaultValue: 'false') == 'true';
+            final checkinSms = await _db.settingsDao.getSetting('sms_checkin_enabled', defaultValue: 'true') == 'true';
+            if (globalSms && checkinSms && student.notificationOptIn == 1 && student.parentPhone.trim().isNotEmpty) {
+              final dateStr = DateFormat('yyyy-MM-dd').format(log.timestamp);
+              final hasAlert = await _db.notificationsDao.hasJobForStudentDateChannel(student.id, dateStr, 'sms');
+              if (!hasAlert) {
+                final timeStr = DateFormat('hh:mm a').format(log.timestamp);
+                final schoolName = await _db.settingsDao.getSetting('school_name', defaultValue: 'School Attendance Portal');
+                final template = await _db.settingsDao.getSetting(
+                  'checkin_sms_template',
+                  defaultValue: 'Dear Parent, your child {student_name} arrived at school at {time} on {date}. Status: {status}. - {school_name}',
+                );
+                final msg = template
+                    .replaceAll('{student_name}', student.name)
+                    .replaceAll('{time}', timeStr)
+                    .replaceAll('{date}', dateStr)
+                    .replaceAll('{status}', status.toUpperCase())
+                    .replaceAll('{school_name}', schoolName);
+
+                await _db.notificationsDao.createJob(
+                  studentId: student.id,
+                  date: dateStr,
+                  channel: 'sms',
+                  recipientPhone: student.parentPhone.trim(),
+                  message: msg,
+                );
+                _smsDispatcher?.trigger();
+              }
+            }
+          } catch (notifErr) {
+            developer.log('Could not queue checkin SMS alert: $notifErr', name: 'SchoolAttendanceProcessor');
+          }
 
           _dedup.add(_processedKeys, dedupKey);
           changed = true;

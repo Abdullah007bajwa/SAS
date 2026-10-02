@@ -4,11 +4,33 @@ import '../database/database_provider.dart';
 import '../hardware/hardware_providers.dart';
 import 'absence_cutoff_service.dart';
 import 'daily_cutoff_timer.dart';
+import 'android_gateway_notification_provider.dart';
 import 'notification_provider.dart';
+import 'sms_queue_dispatcher.dart';
 import 'twilio_notification_provider.dart';
 
-final notificationProviderProvider = Provider<NotificationProvider>((ref) {
+final androidGatewayNotificationProvider = Provider<AndroidGatewayNotificationProvider>((ref) {
+  return AndroidGatewayNotificationProvider();
+});
+
+final twilioNotificationProvider = Provider<TwilioNotificationProvider>((ref) {
   return TwilioNotificationProvider();
+});
+
+final notificationProviderProvider = Provider<NotificationProvider>((ref) {
+  return ref.watch(androidGatewayNotificationProvider);
+});
+
+final smsQueueDispatcherProvider = Provider<SmsQueueDispatcher>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  final gateway = ref.watch(androidGatewayNotificationProvider);
+  final twilio = ref.watch(twilioNotificationProvider);
+
+  return SmsQueueDispatcher(
+    db: db,
+    gatewayProvider: gateway,
+    twilioProvider: twilio,
+  );
 });
 
 final absenceCutoffServiceProvider = Provider<AbsenceCutoffService>((ref) {

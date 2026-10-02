@@ -48,15 +48,20 @@ class _SchoolAttendanceAppState extends ConsumerState<SchoolAttendanceApp> {
     }
 
     // 2. Start biometric attendance listener (WebSocket push + periodic fallback poll)
+    final smsDispatcher = ref.read(smsQueueDispatcherProvider);
+    processor.setSmsDispatcher(smsDispatcher);
     processor.start(bridgeUrl);
 
     // 3. Start automated daily cutoff absence notification monitor
     cutoffTimer.start();
 
-    // 4. Start periodic cloud synchronization
+    // 4. Start sequential carrier-safe SMS queue dispatcher
+    smsDispatcher.start();
+
+    // 5. Start periodic cloud synchronization
     syncService.startPeriodicSync();
 
-    // 5. Automated crash protection daily database backup
+    // 6. Automated crash protection daily database backup
     final backupService = ref.read(databaseBackupServiceProvider);
     backupService.autoDailyBackup(db);
   }
@@ -65,6 +70,7 @@ class _SchoolAttendanceAppState extends ConsumerState<SchoolAttendanceApp> {
   void dispose() {
     ref.read(schoolAttendanceProcessorProvider).stop();
     ref.read(dailyCutoffTimerProvider).stop();
+    ref.read(smsQueueDispatcherProvider).stop();
     ref.read(syncServiceProvider).stopPeriodicSync();
     super.dispose();
   }

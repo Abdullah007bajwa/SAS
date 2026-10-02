@@ -5,6 +5,7 @@ import '../../core/database/database_backup_service.dart';
 import '../../core/database/database_provider.dart';
 import '../../core/database/demo_seeder.dart';
 import '../../core/hardware/hardware_providers.dart';
+import '../../core/notifications/notification_providers.dart';
 import '../../core/theme/app_colors.dart';
 
 final settingsMapProvider = FutureProvider.autoDispose((ref) async {
@@ -39,7 +40,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _smsTemplateCtrl = TextEditingController();
   final _waTemplateCtrl = TextEditingController();
 
+  final _androidGatewayUrlCtrl = TextEditingController();
+  final _androidGatewayUserCtrl = TextEditingController();
+  final _androidGatewayPassCtrl = TextEditingController();
+  final _smsThrottleSecCtrl = TextEditingController();
+  final _checkinSmsTemplateCtrl = TextEditingController();
+
+  String _smsProvider = 'android_gateway';
   bool _smsEnabled = false;
+  bool _checkinSmsEnabled = true;
   bool _waEnabled = false;
   bool _initialized = false;
 
@@ -53,6 +62,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadBackups();
     });
+  }
+
+  @override
+  void dispose() {
+    _schoolNameCtrl.dispose();
+    _cutoffTimeCtrl.dispose();
+    _closingTimeCtrl.dispose();
+    _gracePeriodCtrl.dispose();
+    _studentStartCtrl.dispose();
+    _studentEndCtrl.dispose();
+    _staffStartCtrl.dispose();
+    _staffEndCtrl.dispose();
+    _k50IpCtrl.dispose();
+    _k50PortCtrl.dispose();
+    _bridgePortCtrl.dispose();
+    _twilioSidCtrl.dispose();
+    _twilioTokenCtrl.dispose();
+    _twilioPhoneCtrl.dispose();
+    _twilioWaFromCtrl.dispose();
+    _smsTemplateCtrl.dispose();
+    _waTemplateCtrl.dispose();
+    _androidGatewayUrlCtrl.dispose();
+    _androidGatewayUserCtrl.dispose();
+    _androidGatewayPassCtrl.dispose();
+    _smsThrottleSecCtrl.dispose();
+    _checkinSmsTemplateCtrl.dispose();
+    super.dispose();
   }
 
   void _populate(Map<String, String> s) {
@@ -71,8 +107,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _k50PortCtrl.text = s['k50_port'] ?? '4370';
     _bridgePortCtrl.text = s['k50_bridge_port'] ?? '8787';
 
+    _smsProvider = s['sms_provider'] ?? 'android_gateway';
     _smsEnabled = s['sms_enabled'] == 'true';
+    _checkinSmsEnabled = s['sms_checkin_enabled'] != 'false';
     _waEnabled = s['whatsapp_enabled'] == 'true';
+
+    _androidGatewayUrlCtrl.text = s['sms_gateway_url'] ?? 'http://192.168.18.50:8080';
+    _androidGatewayUserCtrl.text = s['sms_gateway_username'] ?? '';
+    _androidGatewayPassCtrl.text = s['sms_gateway_password'] ?? '';
+    _smsThrottleSecCtrl.text = s['sms_throttle_delay_sec'] ?? '2.5';
+    _checkinSmsTemplateCtrl.text = s['checkin_sms_template'] ??
+        'Dear Parent, your child {student_name} arrived at school at {time} on {date}. Status: {status}. - {school_name}';
+
     _twilioSidCtrl.text = s['twilio_account_sid'] ?? '';
     _twilioTokenCtrl.text = s['twilio_auth_token'] ?? '';
     _twilioPhoneCtrl.text = s['twilio_from_phone'] ?? '';
@@ -330,84 +376,254 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Section 4: Parent Absence Notifications (Twilio)
+              // Section 4: Parent Alerts & SMS Gateway
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 12,
+                        runSpacing: 12,
                         children: [
-                          Icon(Icons.chat_bubble_outline, color: AppColors.primary, size: 20),
-                          SizedBox(width: 8),
-                          Text('Parent Absence Alert Service (Twilio)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.sms_outlined, color: AppColors.primary, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'Parent Alerts & SMS Notification System',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                              ),
+                            ],
+                          ),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.send_to_mobile, size: 16),
+                            label: const Text('Send Test SMS'),
+                            onPressed: _openTestSmsDialog,
+                          ),
                         ],
                       ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Automate instant SMS check-in notifications when students punch at K50, plus absence alerts at cutoff time.',
+                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      ),
                       const SizedBox(height: 16),
-                      Row(
+
+                      // Notification Toggles
+                      Wrap(
+                        spacing: 16,
+                        runSpacing: 8,
                         children: [
-                          Expanded(
+                          SizedBox(
+                            width: 280,
                             child: SwitchListTile(
-                              title: const Text('Enable SMS Notifications'),
-                              subtitle: const Text('Send SMS text alert to parent on cutoff absence'),
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Master SMS Switch', style: TextStyle(fontWeight: FontWeight.w600)),
+                              subtitle: const Text('Enable or disable all outgoing SMS'),
                               value: _smsEnabled,
                               onChanged: (val) => setState(() => _smsEnabled = val),
                             ),
                           ),
-                          Expanded(
+                          SizedBox(
+                            width: 320,
                             child: SwitchListTile(
-                              title: const Text('Enable WhatsApp Alerts'),
-                              subtitle: const Text('Send WhatsApp message to parent on cutoff absence'),
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Real-Time Check-In Alerts', style: TextStyle(fontWeight: FontWeight.w600)),
+                              subtitle: const Text('Send instant SMS when student punches at K50'),
+                              value: _checkinSmsEnabled,
+                              onChanged: (val) => setState(() => _checkinSmsEnabled = val),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 280,
+                            child: SwitchListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('WhatsApp Alerts (Twilio)', style: TextStyle(fontWeight: FontWeight.w600)),
+                              subtitle: const Text('Send WhatsApp message on cutoff absence'),
                               value: _waEnabled,
                               onChanged: (val) => setState(() => _waEnabled = val),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _twilioSidCtrl,
-                              decoration: const InputDecoration(labelText: 'Twilio Account SID'),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: TextField(
-                              controller: _twilioTokenCtrl,
-                              decoration: const InputDecoration(labelText: 'Twilio Auth Token'),
-                              obscureText: true,
-                            ),
-                          ),
-                        ],
+                      const Divider(height: 28),
+
+                      // Provider Selection
+                      const Text(
+                        'SMS Provider Architecture',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _twilioPhoneCtrl,
-                              decoration: const InputDecoration(labelText: 'Twilio Sender Phone (SMS)', hintText: '+1234567890'),
-                            ),
+                      SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment<String>(
+                            value: 'android_gateway',
+                            icon: Icon(Icons.phone_android),
+                            label: Text('Local Android Gateway (Zero Fee - Mobile SIM)'),
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: TextField(
-                              controller: _twilioWaFromCtrl,
-                              decoration: const InputDecoration(labelText: 'Twilio WhatsApp Sender', hintText: '+14155238886'),
-                            ),
+                          ButtonSegment<String>(
+                            value: 'twilio',
+                            icon: Icon(Icons.cloud_outlined),
+                            label: Text('Twilio Cloud SMS (Paid API)'),
                           ),
                         ],
+                        selected: {_smsProvider},
+                        onSelectionChanged: (newSelection) {
+                          setState(() => _smsProvider = newSelection.first);
+                        },
                       ),
                       const SizedBox(height: 16),
+
+                      if (_smsProvider == 'android_gateway') ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.cell_tower, color: AppColors.primary, size: 20),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  '• How it works: Run an open-source SMS Gateway app on an Android phone connected to the school Wi-Fi (e.g., "SMS Gateway for Android" by capcom6 or "Textbee"). The desktop app posts messages over HTTP directly to the phone.\n'
+                                  '• Anti-Spam Carrier Pacing: 2.5s sequential delay between SMS protects your SIM from mobile operator anti-spam blocks during arrival rush.',
+                                  style: TextStyle(fontSize: 12, color: Colors.blueGrey[800], height: 1.4),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: _androidGatewayUrlCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Android Gateway IP & Port',
+                                  hintText: 'http://192.168.18.50:8080',
+                                  prefixIcon: Icon(Icons.wifi),
+                                  helperText: 'Enter phone local IP and port displayed on gateway app',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TextField(
+                                controller: _smsThrottleSecCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Carrier Throttle Delay (sec)',
+                                  hintText: '2.5',
+                                  helperText: 'Delay between consecutive SMS',
+                                ),
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _androidGatewayUserCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Gateway Login / API Key (Optional)',
+                                  hintText: 'admin or leave empty',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TextField(
+                                controller: _androidGatewayPassCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Gateway Password / Secret Token (Optional)',
+                                  hintText: 'Leave empty if unauthenticated',
+                                ),
+                                obscureText: true,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _twilioSidCtrl,
+                                decoration: const InputDecoration(labelText: 'Twilio Account SID'),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TextField(
+                                controller: _twilioTokenCtrl,
+                                decoration: const InputDecoration(labelText: 'Twilio Auth Token'),
+                                obscureText: true,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _twilioPhoneCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Twilio Sender Phone (SMS)',
+                                  hintText: '+1234567890',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TextField(
+                                controller: _twilioWaFromCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Twilio WhatsApp Sender',
+                                  hintText: '+14155238886',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      const Divider(height: 28),
+                      const Text(
+                        'Notification Templates',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 12),
+
+                      TextField(
+                        controller: _checkinSmsTemplateCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Real-Time Check-In SMS Template',
+                          helperText: 'Placeholders: {student_name}, {time}, {date}, {status}, {school_name}',
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: _smsTemplateCtrl,
                         decoration: const InputDecoration(
-                          labelText: 'Absence SMS Template',
-                          helperText: 'Available placeholders: {student_name}, {date}',
+                          labelText: 'Absence Cutoff SMS Template',
+                          helperText: 'Placeholders: {student_name}, {date}',
                         ),
                         maxLines: 2,
                       ),
@@ -415,8 +631,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       TextField(
                         controller: _waTemplateCtrl,
                         decoration: const InputDecoration(
-                          labelText: 'Absence WhatsApp Template',
-                          helperText: 'Available placeholders: {student_name}, {date}',
+                          labelText: 'Absence Cutoff WhatsApp Template',
+                          helperText: 'Placeholders: {student_name}, {date}',
                         ),
                         maxLines: 2,
                       ),
@@ -635,7 +851,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await db.settingsDao.setSetting('k50_port', targetPort.toString());
     await db.settingsDao.setSetting('k50_bridge_port', _bridgePortCtrl.text.trim());
 
+    await db.settingsDao.setSetting('sms_provider', _smsProvider);
     await db.settingsDao.setSetting('sms_enabled', _smsEnabled ? 'true' : 'false');
+    await db.settingsDao.setSetting('sms_checkin_enabled', _checkinSmsEnabled ? 'true' : 'false');
+    await db.settingsDao.setSetting('sms_gateway_url', _androidGatewayUrlCtrl.text.trim());
+    await db.settingsDao.setSetting('sms_gateway_username', _androidGatewayUserCtrl.text.trim());
+    if (_androidGatewayPassCtrl.text.trim().isNotEmpty) {
+      await db.settingsDao.setSetting('sms_gateway_password', _androidGatewayPassCtrl.text.trim());
+    }
+    await db.settingsDao.setSetting('sms_throttle_delay_sec', _smsThrottleSecCtrl.text.trim());
+    await db.settingsDao.setSetting('checkin_sms_template', _checkinSmsTemplateCtrl.text.trim());
+
     await db.settingsDao.setSetting('whatsapp_enabled', _waEnabled ? 'true' : 'false');
     await db.settingsDao.setSetting('twilio_account_sid', _twilioSidCtrl.text.trim());
     if (_twilioTokenCtrl.text.trim().isNotEmpty) {
@@ -659,6 +885,162 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SnackBar(content: Text('Settings saved and device configuration updated!')),
       );
     }
+  }
+
+  void _openTestSmsDialog() {
+    final phoneCtrl = TextEditingController();
+    final messageCtrl = TextEditingController(
+      text: 'Test alert from ${_schoolNameCtrl.text.trim().isEmpty ? "School Portal" : _schoolNameCtrl.text.trim()}: SMS Gateway is connected and running!',
+    );
+    bool sending = false;
+    String? statusMessage;
+    bool isSuccess = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.sms_outlined, color: AppColors.primary),
+              SizedBox(width: 8),
+              Text('Send Test SMS'),
+            ],
+          ),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Test SMS dispatch via ${_smsProvider == "android_gateway" ? "Local Android Gateway (${_androidGatewayUrlCtrl.text.trim()})" : "Twilio Cloud Service"}.',
+                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: phoneCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Recipient Phone Number',
+                    hintText: '03001234567 or +923001234567',
+                    prefixIcon: Icon(Icons.phone_android),
+                  ),
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: messageCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Message Body',
+                  ),
+                  maxLines: 2,
+                ),
+                if (statusMessage != null) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isSuccess
+                          ? AppColors.present.withValues(alpha: 0.1)
+                          : AppColors.absent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isSuccess ? AppColors.present : AppColors.absent,
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          isSuccess ? Icons.check_circle_outline : Icons.error_outline,
+                          size: 18,
+                          color: isSuccess ? AppColors.present : AppColors.absent,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            statusMessage!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isSuccess ? AppColors.present : AppColors.absent,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: sending ? null : () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+            ElevatedButton.icon(
+              icon: sending
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.send, size: 16),
+              label: Text(sending ? 'Sending...' : 'Send SMS'),
+              onPressed: sending
+                  ? null
+                  : () async {
+                      final to = phoneCtrl.text.trim();
+                      final msg = messageCtrl.text.trim();
+                      if (to.isEmpty || msg.isEmpty) {
+                        setDialogState(() {
+                          statusMessage = 'Please enter both phone number and message body.';
+                          isSuccess = false;
+                        });
+                        return;
+                      }
+
+                      setDialogState(() {
+                        sending = true;
+                        statusMessage = null;
+                      });
+
+                      final gatewayProvider = ref.read(androidGatewayNotificationProvider);
+                      final twilioProvider = ref.read(twilioNotificationProvider);
+
+                      final credentials = <String, String>{
+                        'sms_gateway_url': _androidGatewayUrlCtrl.text.trim(),
+                        'sms_gateway_username': _androidGatewayUserCtrl.text.trim(),
+                        'sms_gateway_password': _androidGatewayPassCtrl.text.trim(),
+                        'twilio_account_sid': _twilioSidCtrl.text.trim(),
+                        'twilio_auth_token': _twilioTokenCtrl.text.trim(),
+                        'twilio_from_phone': _twilioPhoneCtrl.text.trim(),
+                      };
+
+                      final provider = _smsProvider == 'twilio' ? twilioProvider : gatewayProvider;
+                      final res = await provider.sendSms(
+                        to: to,
+                        message: msg,
+                        credentials: credentials,
+                      );
+
+                      setDialogState(() {
+                        sending = false;
+                        if (res.success) {
+                          isSuccess = true;
+                          statusMessage = 'Success! SMS sent. Message ID: ${res.messageId ?? "Dispatched via gateway"}';
+                        } else {
+                          isSuccess = false;
+                          statusMessage = 'Failed to send: ${res.error ?? "Unknown error"}';
+                        }
+                      });
+                    },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _seedDemoData() async {
